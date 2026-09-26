@@ -1,0 +1,124 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+
+.detail,
+.empty {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    min-width: 0;
+    padding: calc($space * 2);
+    color: $text-primary;
+    box-sizing: border-box;
+    border: 2px dashed transparent;
+}
+
+.dragging {
+    border-color: $looks-secondary;
+    background: $ui-white-transparent;
+}
+
+.empty {
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: $space;
+    font-size: 1rem;
+}
+
+.empty-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.hint {
+    opacity: 0.7;
+    font-size: 0.85rem;
+}
+
+.header {
+    display: flex;
+    align-items: center;
+    gap: $space;
+}
+
+.name-input {
+    flex-grow: 1;
+    min-width: 0;
+}
+
+.button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: $form-radius;
+    background: $looks-secondary;
+    color: white;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.button:hover {
+    filter: brightness(0.9);
+}
+
+.danger {
+    background: $error-primary;
+}
+
+.info {
+    display: flex;
+    gap: calc($space * 2);
+    margin: $space 0;
+    opacity: 0.7;
+}
+
+.preview {
+    display: flex;
+    flex-grow: 1;
+    min-height: 0;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background: $ui-white;
+    overflow: hidden;
+}
+
+.image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    image-rendering: auto;
+}
+
+.media {
+    max-width: 90%;
+    max-height: 90%;
+}
+
+.text {
+    align-self: stretch;
+    flex-grow: 1;
+    margin: 0;
+    padding: $space;
+    overflow: auto;
+    font-family: monospace;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $space;
+    text-align: center;
+    opacity: 0.8;
+}
+
+.placeholder-icon {
+    width: 6rem;
+    height: 6rem;
+}

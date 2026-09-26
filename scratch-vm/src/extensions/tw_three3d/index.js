@@ -1,20 +1,16 @@
-const THREE = require('three');
 const ArgumentType = require('../../extension-support/argument-type');
 const BlockType = require('../../extension-support/block-type');
 const Cast = require('../../util/cast');
-const StageLayering = require('../../engine/stage-layering');
+const Color = require('../../util/color');
+const Scene3D = require('../../engine/scene-3d');
 const uid = require('../../util/uid');
 
 // eslint-disable-next-line max-len
 const blockIconURI = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><g stroke="#4b3aa8" stroke-width="2" stroke-linejoin="round"><path fill="#b3a6ff" d="M20 5 34 12.5 20 20 6 12.5z"/><path fill="#8a78ff" d="M6 12.5 20 20v15L6 27.5z"/><path fill="#6c57f0" d="M34 12.5 20 20v15l14-7.5z"/></g></svg>')}`;
 
-const SHAPES = ['cube', 'sphere', 'cylinder', 'cone', 'plane', 'torus'];
-
 const PROPS = ['x', 'y', 'z', 'rotX', 'rotY', 'rotZ', 'scaleX', 'scaleY', 'scaleZ'];
 
 const CAMERA_AXES = ['x', 'y', 'z', 'yaw', 'pitch'];
-
-const MODEL_EXTENSION = /\.(glb|gltf)$/i;
 
 /**
  * @param {THREE.Material|THREE.Material[]} material
@@ -22,342 +18,45 @@ const MODEL_EXTENSION = /\.(glb|gltf)$/i;
  */
 const asArray = material => (Array.isArray(material) ? material : [material]);
 
-// Keep the camera from flipping over when looking straight up or down
-const MAX_PITCH = (Math.PI / 2) - 0.001;
-
-// Multisampling for the 3D scene; the stage's own WebGL context has antialiasing off.
-const MSAA_SAMPLES = 4;
-
 /**
- * Renders a three.js scene below everything on the stage (backdrop, pen and sprites).
+ * Procedural objects: 3D objects that scripts create and change by name, for scenes with many generated objects.
+ * Also has the camera, mouse look and environment blocks. Everything happens in the runtime's Scene3D, the same
+ * scene as the 3D sprites. The extension ID is still three3d so that older projects keep working.
  *
- * Normally three.js shares the stage's WebGL2 context and draws straight into the stage framebuffer through the
- * renderer's underlay hook, so nothing is copied between contexts. If that isn't possible (no WebGL2, or a renderer
- * without setUnderlay), it falls back to an offscreen canvas shown as a bitmap skin in the video layer.
+ * three.js is only touched through scene3D.THREE after scene3D.ensure(), because the exported player only has it
+ * for projects that use 3D.
  */
 class Scratch3Three3DBlocks {
     constructor (runtime) {
         this.runtime = runtime;
+    }
 
-        this._three = null;
-        this._canvas = null;
-        this._scene = null;
-        this._camera = null;
-        this._ambient = null;
-        this._sun = null;
-        this._objects = new Map();
-        /** @type {Map<string, Promise<THREE.Object3D>>} parsed models by md5, shared by every loaded copy */
-        this._modelCache = new Map();
-
-        this._skinId = -1;
-        this._drawableId = -1;
-        this._dirty = false;
-
-        /** True when three.js draws into the stage's own WebGL context. */
-        this._shared = false;
-        /** Multisampled target the scene renders into (shared mode). */
-        this._target = null;
-        /** Full-screen quad that draws _target onto the stage (shared mode). */
-        this._blitScene = null;
-        this._blitCamera = null;
-        this._layerVisible = true;
-        this._drawUnderlay = this._drawUnderlay.bind(this);
-
-        this._lockEnabled = false;
-        this._lockSensitivity = 1;
-        this._lockCanvas = null;
-        this._onLockMouseDown = this._onLockMouseDown.bind(this);
-        this._onLockMouseMove = this._onLockMouseMove.bind(this);
-
-        this._render = this._render.bind(this);
-        runtime.on('AFTER_EXECUTE', this._render);
-        runtime.on('STAGE_SIZE_CHANGED', () => this._resize());
-        runtime.on('PROJECT_STOP_ALL', () => this._setPointerLock(false));
-        runtime.on('RUNTIME_DISPOSED', () => this._reset());
+    /** @returns {Scene3D} */
+    get _scene3D () {
+        return this.runtime.scene3D;
     }
 
     /**
-     * Mark the scene for re-rendering. This also requests a redraw so that loops
-     * which only change 3D state yield once per frame instead of running many
-     * times per frame like a loop that doesn't touch the stage.
+     * @returns {boolean} true if the scene exists (there is a stage to draw on)
      */
-    _markDirty () {
-        this._dirty = true;
-        this.runtime.requestRedraw();
-    }
-
-    _setPointerLock (enabled) {
-        this._lockEnabled = enabled;
-        const renderer = this.runtime.renderer;
-        if (!renderer || typeof document === 'undefined') return;
-        const canvas = renderer.canvas;
-        if (enabled && !this._lockCanvas) {
-            this._lockCanvas = canvas;
-            canvas.addEventListener('mousedown', this._onLockMouseDown);
-            document.addEventListener('mousemove', this._onLockMouseMove);
-        }
-        if (!enabled && document.pointerLockElement === canvas) {
-            document.exitPointerLock();
-        }
-    }
-
-    _onLockMouseDown () {
-        const canvas = this._lockCanvas;
-        if (!this._lockEnabled || document.pointerLockElement === canvas) return;
-        const result = canvas.requestPointerLock();
-        // Newer browsers return a promise that rejects e.g. right after pressing Esc
-        if (result && typeof result.catch === 'function') result.catch(() => {});
-    }
-
-    _onLockMouseMove (e) {
-        if (!this._lockEnabled || !this._camera || document.pointerLockElement !== this._lockCanvas) return;
-        const speed = 0.002 * this._lockSensitivity;
-        const rotation = this._camera.rotation;
-        rotation.y -= e.movementX * speed;
-        rotation.x = Math.max(-MAX_PITCH, Math.min(MAX_PITCH, rotation.x - (e.movementY * speed)));
-        rotation.z = 0;
-        this._markDirty();
-    }
-
     _ensure () {
-        const renderer = this.runtime.renderer;
-        if (this._three || !renderer) return !!this._three;
-
-        this._shared = this._createSharedRenderer(renderer);
-        if (!this._shared) {
-            const canvas = document.createElement('canvas');
-            // BitmapSkin would otherwise call getContext('2d') on this WebGL canvas
-            canvas.reusable = false;
-            this._canvas = canvas;
-            this._three = new THREE.WebGLRenderer({
-                canvas,
-                alpha: true,
-                antialias: true,
-                preserveDrawingBuffer: true
-            });
-        }
-        this._three.setClearColor(0x000000, 0);
-
-        this._scene = new THREE.Scene();
-        this._camera = new THREE.PerspectiveCamera(60, 4 / 3, 0.1, 1000);
-        this._camera.position.set(0, 0, 5);
-        // Yaw first, then pitch, so rotation.y / rotation.x are the look angles
-        this._camera.rotation.order = 'YXZ';
-        this._ambient = new THREE.AmbientLight(0xffffff, 0.6);
-        this._sun = new THREE.DirectionalLight(0xffffff, 1.2);
-        this._sun.position.set(3, 5, 4);
-        this._scene.add(this._ambient, this._sun);
-
-        if (this._shared) {
-            renderer.setUnderlay(this._drawUnderlay);
-        } else {
-            this._resize();
-            this._skinId = renderer.createBitmapSkin(this._canvas, this._resolution);
-            this._drawableId = renderer.createDrawable(StageLayering.VIDEO_LAYER);
-            renderer.markDrawableAsNoninteractive(this._drawableId);
-            renderer.updateDrawableSkinId(this._drawableId, this._skinId);
-        }
-        this._markDirty();
-        return true;
+        return this._scene3D.ensure();
     }
 
-    /**
-     * Try to make three.js render with the stage's own WebGL context.
-     * @param {RenderWebGL} renderer the stage renderer
-     * @returns {boolean} true if it worked
-     */
-    _createSharedRenderer (renderer) {
-        const gl = renderer.gl;
-        if (
-            typeof renderer.setUnderlay !== 'function' ||
-            typeof WebGL2RenderingContext === 'undefined' ||
-            !(gl instanceof WebGL2RenderingContext)
-        ) {
-            return false;
-        }
-        try {
-            this._three = new THREE.WebGLRenderer({canvas: renderer.canvas, context: gl});
-        } catch (e) {
-            console.warn('3D: could not share the stage WebGL context', e);
-            this._three = null;
-            return false;
-        }
-        // The stage clears the framebuffer itself; the scene is drawn on top of that.
-        this._three.autoClear = false;
-        this._three.setPixelRatio(1);
-        this._target = new THREE.WebGLRenderTarget(1, 1, {samples: MSAA_SAMPLES});
-        this._blitCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        this._blitScene = new THREE.Scene();
-        this._blitScene.add(new THREE.Mesh(
-            new THREE.PlaneGeometry(2, 2),
-            new THREE.MeshBasicMaterial({
-                map: this._target.texture,
-                // The target was cleared to transparent black, so it already holds premultiplied colors.
-                transparent: true,
-                blending: THREE.CustomBlending,
-                blendSrc: THREE.OneFactor,
-                blendDst: THREE.OneMinusSrcAlphaFactor,
-                depthTest: false,
-                depthWrite: false
-            })
-        ));
-        return true;
+    _markDirty () {
+        this._scene3D.markDirty();
     }
 
-    /**
-     * Called by the stage renderer in the middle of its draw, after clearing and before any drawable.
-     * @param {WebGL2RenderingContext} gl the stage context
-     */
-    _drawUnderlay (gl) {
-        if (!this._layerVisible) return;
-        const three = this._three;
-        const width = gl.drawingBufferWidth;
-        const height = gl.drawingBufferHeight;
-        // The stage renderer changed GL state behind three.js's back
-        three.resetState();
-        if (this._target.width !== width || this._target.height !== height) {
-            this._target.setSize(width, height);
-            this._camera.aspect = width / height;
-            this._camera.updateProjectionMatrix();
-            this._dirty = true;
-        }
-        // The stage redraws for sprite changes too; reuse the last 3D frame unless the scene changed.
-        if (this._dirty) {
-            this._dirty = false;
-            three.setRenderTarget(this._target);
-            three.clear();
-            three.render(this._scene, this._camera);
-        }
-        three.setRenderTarget(null);
-        three.setViewport(0, 0, width, height);
-        three.render(this._blitScene, this._blitCamera);
-        three.resetState();
-    }
-
-    _resize () {
-        if (!this._three) return;
-        if (this._shared) {
-            // Sizes are read from the stage framebuffer when drawing
-            this._markDirty();
-            return;
-        }
-        const renderer = this.runtime.renderer;
-        const width = this.runtime.stageWidth;
-        const height = this.runtime.stageHeight;
-        this._resolution = renderer.useHighQualityRender ?
-            Math.max(1, renderer.canvas.width / width) :
-            1;
-        this._three.setPixelRatio(1);
-        this._three.setSize(Math.round(width * this._resolution), Math.round(height * this._resolution), false);
-        this._camera.aspect = width / height;
-        this._camera.updateProjectionMatrix();
-        this._markDirty();
-    }
-
-    _render () {
-        if (!this._dirty || !this._three) return;
-        const renderer = this.runtime.renderer;
-        if (this._shared) {
-            // Rendered by _drawUnderlay during the stage's draw
-            renderer.dirty = true;
-            return;
-        }
-        this._dirty = false;
-        const wantResolution = renderer.useHighQualityRender ?
-            Math.max(1, renderer.canvas.width / this.runtime.stageWidth) :
-            1;
-        if (wantResolution !== this._resolution) this._resize();
-        this._three.render(this._scene, this._camera);
-        renderer.updateBitmapSkin(this._skinId, this._canvas, this._resolution);
-        this.runtime.requestRedraw();
-    }
-
-    _reset () {
-        this._setPointerLock(false);
-        this._clearObjects();
-        this._clearModelCache();
-        if (!this._three) return;
-        this._scene.background = null;
-        this._camera.position.set(0, 0, 5);
-        this._camera.rotation.set(0, 0, 0);
-        this._camera.fov = 60;
-        this._camera.updateProjectionMatrix();
-        this._ambient.intensity = 0.6;
-        this._sun.position.set(3, 5, 4);
-        this._sun.intensity = 1.2;
-        this._setLayerVisible(true);
-        this._render();
-    }
-
-    _setLayerVisible (visible) {
-        this._layerVisible = visible;
-        if (this._shared) {
-            this.runtime.renderer.dirty = true;
-        } else {
-            this.runtime.renderer.updateDrawableVisible(this._drawableId, visible);
-        }
-    }
-
-    _clearModelCache () {
-        for (const promise of this._modelCache.values()) {
-            promise.then(scene => this._disposeTree(scene, true), () => {});
-        }
-        this._modelCache.clear();
-    }
-
-    _clearObjects () {
-        for (const mesh of this._objects.values()) {
-            this._disposeMesh(mesh);
-        }
-        this._objects.clear();
-        this._markDirty();
-    }
-
-    _disposeMesh (mesh) {
-        if (this._scene) this._scene.remove(mesh);
-        if (mesh.userData.twModel) {
-            // Geometry and textures belong to the cached model; only drop what this copy owns
-            this._disposeTree(mesh, false);
-            return;
-        }
-        mesh.geometry.dispose();
-        mesh.material.dispose();
-    }
-
-    /**
-     * @param {THREE.Object3D} root
-     * @param {boolean} all true to dispose shared geometry, materials and textures too
-     */
-    _disposeTree (root, all) {
-        root.traverse(child => {
-            if (!child.isMesh) return;
-            if (all) child.geometry.dispose();
-            if (all || child.userData.twOwnMaterial) {
-                for (const material of asArray(child.material)) {
-                    if (all) {
-                        for (const value of Object.values(material)) {
-                            if (value && value.isTexture) value.dispose();
-                        }
-                    }
-                    material.dispose();
-                }
-            }
-        });
+    get _camera () {
+        return this._scene3D.camera;
     }
 
     _get (name) {
-        return this._objects.get(Cast.toString(name));
+        return this._scene3D.getObject(Cast.toString(name));
     }
 
-    _makeGeometry (shape) {
-        switch (shape) {
-        case 'sphere': return new THREE.SphereGeometry(0.5, 32, 16);
-        case 'cylinder': return new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
-        case 'cone': return new THREE.ConeGeometry(0.5, 1, 32);
-        case 'plane': return new THREE.PlaneGeometry(1, 1);
-        case 'torus': return new THREE.TorusGeometry(0.4, 0.15, 16, 48);
-        default: return new THREE.BoxGeometry(1, 1, 1);
-        }
+    _degToRad (degrees) {
+        return Cast.toNumber(degrees) * Math.PI / 180;
     }
 
     getInfo () {
@@ -369,7 +68,7 @@ class Scratch3Three3DBlocks {
         const name = {NAME: {type: ArgumentType.STRING, defaultValue: '方塊1'}};
         return {
             id: 'three3d',
-            name: '3D',
+            name: '程序物件',
             color1: '#7c5cff',
             color2: '#6a4ae6',
             color3: '#5a3ccc',
@@ -632,127 +331,48 @@ class Scratch3Three3DBlocks {
     }
 
     _getModelFileMenu () {
-        const names = this.runtime.fileManager.getFileNames().filter(name => MODEL_EXTENSION.test(name));
+        const names = this.runtime.fileManager.getFileNames().filter(name => Scene3D.MODEL_EXTENSION.test(name));
         if (names.length === 0) {
             return [{text: '（先到「檔案」分頁上傳 .glb）', value: ''}];
         }
         return names;
     }
 
-    /**
-     * Resolve a URI referenced from a .gltf (buffers, textures) against the project's files.
-     * @param {string} url
-     * @param {string[]} blobURLs blob URLs created here, to revoke later
-     * @returns {string}
-     */
-    _resolveModelURL (url, blobURLs) {
-        if (/^(data|blob|https?):/i.test(url)) return url;
-        let name = url.replace(/^\.\//, '');
-        try {
-            name = decodeURIComponent(name);
-        } catch (e) {
-            // keep the raw name
-        }
-        const fileManager = this.runtime.fileManager;
-        const file = fileManager.getFile(name) || fileManager.getFile(name.split('/').pop());
-        if (!file) return url;
-        const blobURL = URL.createObjectURL(new Blob([file.data], {type: fileManager.getMimeType(file.name)}));
-        blobURLs.push(blobURL);
-        return blobURL;
-    }
-
-    /**
-     * @param {{name: string; data: Uint8Array; md5: string}} file
-     * @returns {Promise<THREE.Object3D>}
-     */
-    _parseModel (file) {
-        // Loaded lazily since it is only needed by projects that load models
-        const {GLTFLoader} = require('three/examples/jsm/loaders/GLTFLoader.js');
-        const blobURLs = [];
-        const manager = new THREE.LoadingManager();
-        manager.setURLModifier(url => this._resolveModelURL(url, blobURLs));
-        const loader = new GLTFLoader(manager);
-        const data = file.data;
-        const buffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-        return new Promise((resolve, reject) => {
-            loader.parse(buffer, '', gltf => resolve(gltf.scene), reject);
-        }).finally(() => {
-            for (const url of blobURLs) URL.revokeObjectURL(url);
-        });
-    }
-
     loadModel (args) {
         if (!this._ensure()) return;
-        const file = this.runtime.fileManager.getFile(Cast.toString(args.FILE));
-        if (!file || !MODEL_EXTENSION.test(file.name)) return;
+        const promise = this._scene3D.getModel(Cast.toString(args.FILE));
+        if (!promise) return;
         const key = Cast.toString(args.NAME);
-
-        // .gltf files can reference other files, so they are cached by name too
-        const cacheKey = `${file.md5}/${file.name.toLowerCase()}`;
-        let promise = this._modelCache.get(cacheKey);
-        if (!promise) {
-            promise = this._parseModel(file);
-            this._modelCache.set(cacheKey, promise);
-            promise.catch(() => this._modelCache.delete(cacheKey));
-        }
-
         return promise.then(scene => {
-            const {clone} = require('three/examples/jsm/utils/SkeletonUtils.js');
-            const model = clone(scene);
-            model.userData.twModel = true;
-            const old = this._objects.get(key);
-            if (old) {
-                model.position.copy(old.position);
-                model.rotation.copy(old.rotation);
-                model.scale.copy(old.scale);
-                this._disposeMesh(old);
-            }
-            this._objects.set(key, model);
-            this._scene.add(model);
-            this._markDirty();
-        }, error => {
-            console.warn(`3D: could not load model ${file.name}`, error);
-        });
+            this._scene3D.setObject(key, this._scene3D.cloneModel(scene));
+        }, () => {});
     }
 
     create (args) {
         if (!this._ensure()) return;
-        const shape = SHAPES.includes(args.SHAPE) ? args.SHAPE : 'cube';
-        const key = Cast.toString(args.NAME);
-        const old = this._objects.get(key);
-        if (old) this._disposeMesh(old);
+        const THREE = this._scene3D.THREE;
+        const shape = Scene3D.SHAPES.includes(args.SHAPE) ? args.SHAPE : 'cube';
         const mesh = new THREE.Mesh(
-            this._makeGeometry(shape),
+            this._scene3D.getGeometry(shape),
             new THREE.MeshStandardMaterial({
                 color: 0x4c97ff,
                 side: shape === 'plane' ? THREE.DoubleSide : THREE.FrontSide
             })
         );
-        if (old) {
-            mesh.position.copy(old.position);
-            mesh.rotation.copy(old.rotation);
-            mesh.scale.copy(old.scale);
-        }
-        this._objects.set(key, mesh);
-        this._scene.add(mesh);
-        this._markDirty();
+        mesh.userData.twSharedGeometry = true;
+        this._scene3D.setObject(Cast.toString(args.NAME), mesh);
     }
 
     remove (args) {
-        const key = Cast.toString(args.NAME);
-        const mesh = this._objects.get(key);
-        if (!mesh) return;
-        this._disposeMesh(mesh);
-        this._objects.delete(key);
-        this._markDirty();
+        this._scene3D.removeObject(Cast.toString(args.NAME));
     }
 
     removeAll () {
-        this._clearObjects();
+        this._scene3D.clearObjects();
     }
 
     exists (args) {
-        return this._objects.has(Cast.toString(args.NAME));
+        return this._scene3D.objects.has(Cast.toString(args.NAME));
     }
 
     setPosition (args) {
@@ -774,20 +394,16 @@ class Scratch3Three3DBlocks {
     setRotation (args) {
         const mesh = this._get(args.NAME);
         if (!mesh) return;
-        mesh.rotation.set(
-            THREE.MathUtils.degToRad(Cast.toNumber(args.X)),
-            THREE.MathUtils.degToRad(Cast.toNumber(args.Y)),
-            THREE.MathUtils.degToRad(Cast.toNumber(args.Z))
-        );
+        mesh.rotation.set(this._degToRad(args.X), this._degToRad(args.Y), this._degToRad(args.Z));
         this._markDirty();
     }
 
     changeRotation (args) {
         const mesh = this._get(args.NAME);
         if (!mesh) return;
-        mesh.rotation.x += THREE.MathUtils.degToRad(Cast.toNumber(args.X));
-        mesh.rotation.y += THREE.MathUtils.degToRad(Cast.toNumber(args.Y));
-        mesh.rotation.z += THREE.MathUtils.degToRad(Cast.toNumber(args.Z));
+        mesh.rotation.x += this._degToRad(args.X);
+        mesh.rotation.y += this._degToRad(args.Y);
+        mesh.rotation.z += this._degToRad(args.Z);
         this._markDirty();
     }
 
@@ -810,6 +426,7 @@ class Scratch3Three3DBlocks {
     setColor (args) {
         const mesh = this._get(args.NAME);
         if (!mesh) return;
+        const THREE = this._scene3D.THREE;
         const rgb = Cast.toRgbColorObject(args.COLOR);
         mesh.traverse(child => {
             if (!child.isMesh) return;
@@ -837,14 +454,15 @@ class Scratch3Three3DBlocks {
     getProp (args) {
         const mesh = this._get(args.NAME);
         if (!mesh || !PROPS.includes(args.PROP)) return 0;
+        const radToDeg = radians => radians * 180 / Math.PI;
         let value;
         switch (args.PROP) {
         case 'x': value = mesh.position.x; break;
         case 'y': value = mesh.position.y; break;
         case 'z': value = mesh.position.z; break;
-        case 'rotX': value = THREE.MathUtils.radToDeg(mesh.rotation.x); break;
-        case 'rotY': value = THREE.MathUtils.radToDeg(mesh.rotation.y); break;
-        case 'rotZ': value = THREE.MathUtils.radToDeg(mesh.rotation.z); break;
+        case 'rotX': value = radToDeg(mesh.rotation.x); break;
+        case 'rotY': value = radToDeg(mesh.rotation.y); break;
+        case 'rotZ': value = radToDeg(mesh.rotation.z); break;
         case 'scaleX': value = mesh.scale.x; break;
         case 'scaleY': value = mesh.scale.y; break;
         case 'scaleZ': value = mesh.scale.z; break;
@@ -887,11 +505,16 @@ class Scratch3Three3DBlocks {
     }
 
     getCamera (args) {
-        if (!this._camera || !CAMERA_AXES.includes(args.AXIS)) return 0;
+        if (!CAMERA_AXES.includes(args.AXIS)) return 0;
+        if (!this._camera) {
+            // No stage yet: the camera the project will start with
+            return this._scene3D.environment.camera[args.AXIS];
+        }
+        const radToDeg = radians => radians * 180 / Math.PI;
         let value;
         switch (args.AXIS) {
-        case 'yaw': value = THREE.MathUtils.radToDeg(this._camera.rotation.y); break;
-        case 'pitch': value = THREE.MathUtils.radToDeg(this._camera.rotation.x); break;
+        case 'yaw': value = radToDeg(this._camera.rotation.y); break;
+        case 'pitch': value = radToDeg(this._camera.rotation.x); break;
         default: value = this._camera.position[args.AXIS];
         }
         return Math.round(value * 1e6) / 1e6;
@@ -919,10 +542,10 @@ class Scratch3Three3DBlocks {
 
     setCameraDirection (args) {
         if (!this._ensure()) return;
-        const pitch = THREE.MathUtils.degToRad(Cast.toNumber(args.PITCH));
+        const pitch = this._degToRad(args.PITCH);
         this._camera.rotation.set(
-            Math.max(-MAX_PITCH, Math.min(MAX_PITCH, pitch)),
-            THREE.MathUtils.degToRad(Cast.toNumber(args.YAW)),
+            Math.max(-Scene3D.MAX_PITCH, Math.min(Scene3D.MAX_PITCH, pitch)),
+            this._degToRad(args.YAW),
             0
         );
         this._markDirty();
@@ -934,19 +557,15 @@ class Scratch3Three3DBlocks {
             this._addExampleScript(util.target);
         }
         if (!this._ensure()) return;
-        const sensitivity = Cast.toNumber(args.SENS);
-        this._lockSensitivity = sensitivity > 0 ? sensitivity : 1;
-        this._setPointerLock(true);
+        this._scene3D.setPointerLock(true, Cast.toNumber(args.SENS));
     }
 
     disablePointerLock () {
-        this._setPointerLock(false);
+        this._scene3D.setPointerLock(false);
     }
 
     isPointerLocked () {
-        return typeof document !== 'undefined' &&
-            !!this._lockCanvas &&
-            document.pointerLockElement === this._lockCanvas;
+        return this._scene3D.isPointerLocked();
     }
 
     /**
@@ -1034,35 +653,34 @@ class Scratch3Three3DBlocks {
     }
 
     setBackground (args) {
-        if (!this._ensure()) return;
         const rgb = Cast.toRgbColorObject(args.COLOR);
-        this._scene.background = new THREE.Color().setRGB(rgb.r / 255, rgb.g / 255, rgb.b / 255, THREE.SRGBColorSpace);
-        this._markDirty();
+        this._ensure();
+        this._scene3D.setEnvironment({background: {type: 'color', color: Color.rgbToHex(rgb)}});
     }
 
     clearBackground () {
-        if (!this._ensure()) return;
-        this._scene.background = null;
-        this._markDirty();
+        this._ensure();
+        this._scene3D.setEnvironment({background: {type: 'none'}});
     }
 
     setAmbient (args) {
-        if (!this._ensure()) return;
-        this._ambient.intensity = Math.max(0, Cast.toNumber(args.VALUE));
-        this._markDirty();
+        this._ensure();
+        this._scene3D.setEnvironment({ambient: {intensity: Math.max(0, Cast.toNumber(args.VALUE))}});
     }
 
     setSun (args) {
-        if (!this._ensure()) return;
-        this._sun.position.set(Cast.toNumber(args.X), Cast.toNumber(args.Y), Cast.toNumber(args.Z));
-        this._sun.intensity = Math.max(0, Cast.toNumber(args.VALUE));
-        this._markDirty();
+        this._ensure();
+        this._scene3D.setEnvironment({sun: {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+            intensity: Math.max(0, Cast.toNumber(args.VALUE))
+        }});
     }
 
     setLayerVisible (args) {
         if (!this._ensure()) return;
-        this._setLayerVisible(args.VISIBLE !== 'hide');
-        this.runtime.requestRedraw();
+        this._scene3D.setLayerVisible(args.VISIBLE !== 'hide');
     }
 }
 

@@ -30,6 +30,8 @@ const Base64Util = require('./util/base64-util');
 
 const RESERVED_NAMES = ['_mouse_', '_stage_', '_edge_', '_myself_', '_random_'];
 
+const PROJECT_MIME_TYPE = 'application/x.blocks3d.3dsb';
+
 const CORE_EXTENSIONS = [
     // 'motion',
     // 'looks',
@@ -43,7 +45,9 @@ const CORE_EXTENSIONS = [
     'twfiles',
     'twvars',
     'twclonevars',
-    'twlocalvars'
+    'twlocalvars',
+    // Procedural 3D objects, camera and environment
+    'three3d'
 ];
 
 // Disable missing translation warnings in console
@@ -455,11 +459,27 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
-     * Load a Scratch project from a .sb, .sb2, .sb3 or json string.
+     * Load a project from a .3dsb, .sb, .sb2, .sb3 or json string.
      * @param {string | object} input A json string, object, or ArrayBuffer representing the project to load.
      * @return {!Promise} Promise that resolves after targets are installed.
      */
     loadProject (input) {
+        const tw3dsb = require('./serialization/3dsb');
+        return tw3dsb.unpack(input).then(unpacked => {
+            if (unpacked) {
+                return this.deserializeProject(unpacked.json, unpacked.zip)
+                    .then(() => this.runtime.handleProjectLoaded());
+            }
+            return this._loadScratchProject(input);
+        });
+    }
+
+    /**
+     * Load a Scratch project (.sb, .sb2, .sb3). Its sprites become 2D sprites.
+     * @param {string | object} input A json string, object, or ArrayBuffer representing the project to load.
+     * @return {!Promise} Promise that resolves after targets are installed.
+     */
+    _loadScratchProject (input) {
         if (typeof input === 'object' && !(input instanceof ArrayBuffer) &&
           !ArrayBuffer.isView(input)) {
             // If the input is an object and not any ArrayBuffer
@@ -584,28 +604,46 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
-     * @param {JSZip.OutputType} [type] JSZip output type. Defaults to 'blob' for Scratch compatibility.
-     * @returns {Promise<unknown>} Compressed sb3 file in a type determined by the type argument.
+     * @param {JSZip.OutputType} [type] JSZip output type. Defaults to 'blob'.
+     * @returns {Promise<unknown>} Compressed .3dsb file in a type determined by the type argument.
      */
-    saveProjectSb3 (type) {
+    saveProject3dsb (type) {
         return this._saveProjectZip().generateAsync({
             // Don't configure compression here. _saveProjectZip() will set it for each file.
             type: type || 'blob',
-            mimeType: 'application/x.scratch.sb3'
+            mimeType: PROJECT_MIME_TYPE
         });
     }
 
     /**
      * @param {JSZip.OutputType} [type] JSZip output type. Defaults to 'arraybuffer'.
-     * @returns {StreamHelper} JSZip StreamHelper object generating the compressed sb3.
+     * @returns {StreamHelper} JSZip StreamHelper object generating the compressed .3dsb.
      * See: https://stuk.github.io/jszip/documentation/api_streamhelper.html
      */
-    saveProjectSb3Stream (type) {
+    saveProject3dsbStream (type) {
         return this._saveProjectZip().generateInternalStream({
             type: type || 'arraybuffer',
-            mimeType: 'application/x.scratch.sb3',
+            mimeType: PROJECT_MIME_TYPE,
             compression: 'DEFLATE'
         });
+    }
+
+    /**
+     * Projects are only saved as .3dsb; this is an alias of saveProject3dsb for older callers (e.g. addons).
+     * @param {JSZip.OutputType} [type] JSZip output type.
+     * @returns {Promise<unknown>} Compressed .3dsb file.
+     */
+    saveProjectSb3 (type) {
+        return this.saveProject3dsb(type);
+    }
+
+    /**
+     * Alias of saveProject3dsbStream, see saveProjectSb3.
+     * @param {JSZip.OutputType} [type] JSZip output type.
+     * @returns {StreamHelper} JSZip StreamHelper object generating the compressed .3dsb.
+     */
+    saveProjectSb3Stream (type) {
+        return this.saveProject3dsbStream(type);
     }
 
     /**
@@ -707,14 +745,14 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
-     * Export project or sprite as a Scratch 3.0 JSON representation.
+     * Export the project as .3dsb project.json, or a sprite as sprite.json.
      * @param {string=} optTargetId - Optional id of a sprite to serialize
      * @param {*} serializationOptions Options to pass to the serializer
      * @return {string} Serialized state of the runtime.
      */
     toJSON (optTargetId, serializationOptions) {
-        const sb3 = require('./serialization/sb3');
-        return StringUtil.stringify(sb3.serialize(this.runtime, optTargetId, serializationOptions));
+        const tw3dsb = require('./serialization/3dsb');
+        return StringUtil.stringify(tw3dsb.serialize(this.runtime, optTargetId, serializationOptions));
     }
 
     // TODO do we still need this function? Keeping it here so as not to introduce
@@ -744,6 +782,10 @@ class VirtualMachine extends EventEmitter {
         }
         const runtime = this.runtime;
         const deserializePromise = function () {
+            if (projectJSON.meta && projectJSON.meta.format === '3dsb') {
+                const tw3dsb = require('./serialization/3dsb');
+                return tw3dsb.deserialize(projectJSON, runtime, zip);
+            }
             const projectVersion = projectJSON.projectVersion;
             if (projectVersion === 2) {
                 const sb2 = require('./serialization/sb2');
@@ -925,6 +967,40 @@ class VirtualMachine extends EventEmitter {
         return sb2.deserialize(sprite, this.runtime, true, zip)
             .then(({targets, extensions}) =>
                 this.installTargets(targets, extensions, false));
+    }
+
+    /**
+     * Add a new 3D sprite and select it.
+     * @param {object} [options] Initial state, all optional:
+     * name, models (e.g. [{name: 'cube', shape: 'cube'}] or [{name: 'car', file: 'car.glb'}]),
+     * position, rotation and scale ({x, y, z}), visible, currentModel and material ({color, opacity, texture}).
+     * @returns {Promise} Resolves after the sprite is installed.
+     */
+    addSprite3D (options = {}) {
+        const tw3dsb = require('./serialization/3dsb');
+        const spriteJSON = {
+            isStage: false,
+            name: typeof options.name === 'string' && options.name ? options.name : '3D 角色',
+            kind: '3d',
+            variables: {},
+            lists: {},
+            broadcasts: {},
+            blocks: {},
+            comments: {},
+            sounds: [],
+            costumes: [],
+            volume: 100,
+            draggable: false,
+            position: options.position || {x: 0, y: 0, z: 0},
+            rotation: options.rotation || {x: 0, y: 0, z: 0},
+            scale: options.scale || {x: 1, y: 1, z: 1},
+            visible: typeof options.visible === 'boolean' ? options.visible : true,
+            models: options.models || [{name: 'cube', shape: 'cube'}],
+            currentModel: options.currentModel || 0,
+            material: Object.assign({color: '#4c97ff'}, options.material)
+        };
+        return tw3dsb.deserialize(spriteJSON, this.runtime, null, true)
+            .then(({targets, extensions}) => this.installTargets(targets, extensions, false));
     }
 
     /**

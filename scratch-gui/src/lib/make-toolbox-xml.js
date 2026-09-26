@@ -866,6 +866,8 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     // and also add an "is compiled?" block to the top.
     // 檔案 is built in: always right after My Blocks
     const filesXML = moveCategory('twfiles');
+    // 程序物件 (built-in three3d) comes next
+    const proceduralXML = moveCategory('three3d');
 
     let turbowarpXML = moveCategory('tw');
     if (turbowarpXML && !turbowarpXML.includes(extraTurboWarpBlocks)) {
@@ -887,6 +889,10 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
 
     if (filesXML) {
         everything.push(gap, filesXML);
+    }
+
+    if (proceduralXML) {
+        everything.push(gap, proceduralXML);
     }
 
     if (turbowarpXML) {

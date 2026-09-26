@@ -115,7 +115,7 @@ const FileDetail = props => {
                     {'上傳檔案'}
                 </button>
                 <div className={styles.hint}>
-                    {'檔案會跟專案一起存進 .sb3，也會一起匯出成 HTML。'}
+                    {'檔案會跟專案一起存進 .3dsb，也會一起匯出成 HTML。'}
                 </div>
             </div>
         );

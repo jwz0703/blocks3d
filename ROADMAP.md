@@ -18,21 +18,21 @@
 
 ## 階段 1：`.3dsb` 檔案格式
 
-1. 容器沿用 zip，裡面放 `project.json` 和素材；`meta` 裡加上 `format: "3dsb"` 和 `formatVersion`，並建立版本遷移表（`formatVersion` N → N+1 的轉換函式）。
-2. 新的序列化模組 `scratch-vm/src/serialization/3dsb.js`，跟 `sb3.js` 分開：
+1. ✅ 容器沿用 zip，裡面放 `project.json` 和素材；`meta` 裡加上 `format: "3dsb"` 和 `formatVersion`，並建立版本遷移表（`formatVersion` N → N+1 的轉換函式）。
+2. ✅ 新的序列化模組 `scratch-vm/src/serialization/3dsb.js`，跟 `sb3.js` 分開：
    - 每個 target 加上 `kind: "2d" | "3d"`。
    - 3D 角色的欄位：`position {x,y,z}`、`rotation {x,y,z}`（角度）、`scale {x,y,z}`、`visible`、`models`（取代造型）、`currentModel`、`material`（顏色、透明度、貼圖）。
    - 舞台的欄位：`environment`（背景或天空盒、環境光、太陽光、霧）。
-3. 匯入 `.sb3`：所有角色都當成 2D 角色讀進來；如果用到 `three3d` 擴充，積木照原樣保留。
-4. 存檔、開檔、拖放檔案、下載檔名、獨立匯出（HTML / ZIP）全部改成 `.3dsb`。
+3. ✅ 匯入 `.sb3`：所有角色都當成 2D 角色讀進來；如果用到 `three3d` 擴充，積木照原樣保留。
+4. ✅ 存檔、開檔、拖放檔案、下載檔名、獨立匯出（HTML / ZIP）全部改成 `.3dsb`。
 
 ## 階段 2：runtime 核心的 3D
 
-1. 把場景搬到 runtime 層級，新模組 `Scene3D`，負責 three.js 的 scene、相機、燈光、模型快取、渲染。繼續沿用共用舞台 WebGL2 context、當作底層繪製的做法，連同無法共用時改用 offscreen canvas 的後備方案。
-2. 新增 `Target3D`，跟 `RenderedTarget` 同一層級：擁有一個 `Object3D`，分身時複製 mesh（共用 geometry 和材質），刪除時釋放資源。
-3. 2D 角色一律畫在 3D 場景上面。
-4. 編輯模式下即時重畫：target 屬性一改變就標記 dirty 並重畫，不只在 `AFTER_EXECUTE` 時才畫。
-5. `three3d` 原本用 ID 操作的積木改成一個「程序物件」分類，直接操作同一個 `Scene3D`。
+1. ✅ 把場景搬到 runtime 層級，新模組 `Scene3D`，負責 three.js 的 scene、相機、燈光、模型快取、渲染。繼續沿用共用舞台 WebGL2 context、當作底層繪製的做法，連同無法共用時改用 offscreen canvas 的後備方案。
+2. ✅ 新增 `Target3D`，跟 `RenderedTarget` 同一層級：擁有一個 `Object3D`，分身時複製 mesh（共用 geometry 和材質），刪除時釋放資源。（實作上是 `RenderedTarget` 的子類別，2D drawable 永遠隱藏，這樣程式、變數、分身、角色列表都不用改。）
+3. ✅ 2D 角色一律畫在 3D 場景上面。
+4. ✅ 編輯模式下即時重畫：target 屬性一改變就標記 dirty 並重畫，不只在 `AFTER_EXECUTE` 時才畫。
+5. ✅ `three3d` 原本用 ID 操作的積木改成一個「程序物件」分類，直接操作同一個 `Scene3D`。
 
 ## 階段 3：編輯器
 

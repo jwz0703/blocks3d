@@ -49,8 +49,6 @@ import gdxforInsetIconURL from './gdxfor/gdxfor-small.svg';
 import gdxforConnectionIconURL from './gdxfor/gdxfor-illustration.svg';
 import gdxforConnectionSmallIconURL from './gdxfor/gdxfor-small.svg';
 
-import three3dIconURL from './three3d/three3d.svg';
-import three3dInsetIconURL from './three3d/three3d-small.svg';
 
 import twIcon from './tw/tw.svg';
 import customExtensionIcon from './custom/custom.svg';
@@ -382,16 +380,6 @@ export default [
                 id="tw.twExtension.description"
             />
         ),
-        incompatibleWithScratch: true,
-        tags: ['tw'],
-        featured: true
-    },
-    {
-        name: '3D',
-        extensionId: 'three3d',
-        iconURL: three3dIconURL,
-        insetIconURL: three3dInsetIconURL,
-        description: '用 three.js 在舞台上建立 3D 物體、相機和光源。',
         incompatibleWithScratch: true,
         tags: ['tw'],
         featured: true

@@ -15,7 +15,7 @@ import {getEventXY} from '../lib/touch-utils';
 
 /**
  * @typedef StandaloneData
- * @property {string} project base64 encoded sb3
+ * @property {string} project base64 encoded .3dsb
  * @property {string} [title]
  */
 

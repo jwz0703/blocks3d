@@ -13,6 +13,8 @@ const serializeAssets = function (runtime, assetType, optTargetId) {
     const assetDescs = [];
     for (let i = 0; i < targets.length; i++) {
         const currTarget = targets[i];
+        // The costume of a 3D sprite is a placeholder that isn't saved in projects (only in exported sprites)
+        if (assetType === 'costumes' && currTarget.is3D && !optTargetId) continue;
         const currAssets = currTarget.sprite[assetType];
         for (let j = 0; j < currAssets.length; j++) {
             const currAsset = currAssets[j];

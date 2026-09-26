@@ -1214,6 +1214,10 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
     const {costumePromises} = assets;
     // Sounds from JSON
     const {soundBank, soundPromises} = assets;
+    // 3D sprites only come from .3dsb projects and sprites, see serialization/3dsb.js
+    if (object.kind === '3d' && !object.isStage) {
+        sprite.kind = '3d';
+    }
     // Create the first clone, and load its run-state from JSON.
     const target = sprite.createClone(object.isStage ? StageLayering.BACKGROUND_LAYER : StageLayering.SPRITE_LAYER);
     // Load target properties from JSON.
@@ -1335,6 +1339,9 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
     }
     if (Object.prototype.hasOwnProperty.call(object, 'extensionStorage')) {
         target.extensionStorage = object.extensionStorage;
+    }
+    if (target.is3D) {
+        target.load3D(object);
     }
     Promise.all(costumePromises).then(costumes => {
         sprite.costumes = costumes;

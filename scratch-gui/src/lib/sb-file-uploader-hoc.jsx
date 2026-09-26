@@ -25,6 +25,13 @@ import {
     closeFileMenu
 } from '../reducers/menus';
 
+// .3dsb projects, and Scratch projects that are imported (their sprites become 2D sprites)
+const PROJECT_EXTENSIONS = ['.3dsb', '.sb', '.sb2', '.sb3'];
+const PROJECT_FILE_NAME = /^(.*)\.(3dsb|sb[23]?)$/i;
+
+// There can be several instances of the HOC; only one of them handles dropped files.
+let dropHandlerOwner = null;
+
 /**
  * Higher Order Component to provide behavior for loading local project files into editor.
  * @param {React.Component} WrappedComponent the component to add project file loading functionality to
@@ -44,11 +51,20 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                 'handleFinishedLoadingUpload',
                 'handleStartSelectingFileUpload',
                 'handleChange',
+                'handleDragOver',
+                'handleDrop',
                 'onload',
                 'removeFileObjects'
             ]);
             // tw: We have multiple instances of this HOC alive at a time. This flag fixes issues that arise from that.
             this.expectingFileUploadFinish = false;
+        }
+        componentDidMount () {
+            if (!dropHandlerOwner) {
+                dropHandlerOwner = this;
+                document.addEventListener('dragover', this.handleDragOver);
+                document.addEventListener('drop', this.handleDrop);
+            }
         }
         componentDidUpdate (prevProps) {
             if (this.props.isLoadingUpload && !prevProps.isLoadingUpload && this.expectingFileUploadFinish) {
@@ -57,6 +73,34 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         }
         componentWillUnmount () {
             this.removeFileObjects();
+            if (dropHandlerOwner === this) {
+                dropHandlerOwner = null;
+                document.removeEventListener('dragover', this.handleDragOver);
+                document.removeEventListener('drop', this.handleDrop);
+            }
+        }
+        handleDragOver (e) {
+            // Allow dropping files anywhere; places with their own drop handling (e.g. sprites) still get it
+            if (!e.defaultPrevented && e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
+                e.preventDefault();
+            }
+        }
+        // Dropping a project file anywhere opens it, like File > Load from your computer
+        handleDrop (e) {
+            const files = e.dataTransfer && e.dataTransfer.files;
+            if (e.defaultPrevented || !files || files.length !== 1 || !PROJECT_FILE_NAME.test(files[0].name)) {
+                return;
+            }
+            e.preventDefault();
+            this.removeFileObjects();
+            this.expectingFileUploadFinish = true;
+            this.fileReader = new FileReader();
+            this.fileReader.onload = this.onload;
+            this.handleChange({
+                target: {
+                    files: [files[0]]
+                }
+            });
         }
         // step 1: this is where the upload process begins
         handleStartSelectingFileUpload () {
@@ -80,7 +124,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                             multiple: false,
                             types: [
                                 {
-                                    description: 'Scratch Project',
+                                    description: 'Blocks3D Project',
                                     accept: {
                                         // Chrome on Android tracks the MIME type of files that get downloaded and
                                         // then actually enforces that the type must match in showOpenFilePicker()
@@ -89,7 +133,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                                         // what MIME type they are saved with, so we have to use the most broad MIME
                                         // type here. Otherwise some users just won't be able to load files for no
                                         // fault of their own.
-                                        '*/*': ['.sb', '.sb2', '.sb3']
+                                        '*/*': PROJECT_EXTENSIONS
                                     }
                                 }
                             ]
@@ -112,7 +156,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
             } else {
                 // create <input> element and add it to DOM
                 this.inputElement = document.createElement('input');
-                this.inputElement.accept = '.sb,.sb2,.sb3';
+                this.inputElement.accept = PROJECT_EXTENSIONS.join(',');
                 this.inputElement.style = 'display: none;';
                 this.inputElement.type = 'file';
                 this.inputElement.onchange = this.handleChange; // connects to step 3
@@ -149,7 +193,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
                     // Don't update file handle until after confirming replace.
                     const handle = thisFileInput.handle;
                     if (handle) {
-                        if (this.fileToUpload.name.endsWith('.sb3')) {
+                        // Saving writes .3dsb, so only keep the handle of .3dsb files to save back into
+                        if (this.fileToUpload.name.toLowerCase().endsWith('.3dsb')) {
                             this.props.onSetFileHandle(handle);
                         } else {
                             this.props.onSetFileHandle(null);
@@ -184,9 +229,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
         // used in step 6 below
         getProjectTitleFromFilename (fileInputFilename) {
             if (!fileInputFilename) return '';
-            // only parse title with valid scratch project extensions
-            // (.sb, .sb2, and .sb3)
-            const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
+            // only parse title with valid project extensions (.3dsb, .sb, .sb2, and .sb3)
+            const matches = fileInputFilename.match(PROJECT_FILE_NAME);
             if (!matches) return '';
             return matches[1].substring(0, 100); // truncate project title to max 100 chars
         }

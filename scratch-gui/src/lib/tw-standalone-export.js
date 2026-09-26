@@ -40,7 +40,14 @@ const fetchScript = async url => {
  * @param {VirtualMachine} vm VM with the project to export
  * @returns {Set<string>} IDs of the extensions that the project uses
  */
-const getUsedExtensions = vm => new Set(JSON.parse(vm.toJSON()).extensions || []);
+const getUsedExtensions = vm => {
+    const used = new Set(JSON.parse(vm.toJSON()).extensions || []);
+    // 3D sprites need three.js even when no procedural object blocks (three3d) are used
+    if (vm.runtime.targets.some(target => target.is3D)) {
+        used.add('three3d');
+    }
+    return used;
+};
 
 /**
  * @param {Set<string>} usedExtensions See getUsedExtensions
@@ -90,7 +97,7 @@ const getUsedFonts = vm => {
 };
 
 /**
- * @param {ArrayBuffer} buffer sb3 data
+ * @param {ArrayBuffer} buffer .3dsb data
  * @returns {Promise<string>} base64 without the data: prefix
  */
 const arrayBufferToBase64 = buffer => new Promise((resolve, reject) => {
@@ -142,7 +149,7 @@ ${scripts}
 
 /**
  * @param {string} title Project title
- * @param {string} projectBase64 sb3 as base64
+ * @param {string} projectBase64 .3dsb as base64
  * @param {object.<string, string>} fonts See getUsedFonts
  * @returns {string} JS that sets up the globals that the player reads
  */
@@ -163,17 +170,17 @@ const getBaseName = title => (title || 'Project').replace(/[\\/:*?"<>|]/g, '_');
 /**
  * @param {VirtualMachine} vm VM with the project to export
  * @param {string} title Project title
- * @returns {Promise<{sb3: ArrayBuffer, data: string, player: string, optional: object[]}>} What to export
+ * @returns {Promise<{project: ArrayBuffer, data: string, player: string, optional: object[]}>} What to export
  */
 const prepareExport = async (vm, title) => {
-    const [scripts, sb3] = await Promise.all([
+    const [scripts, project] = await Promise.all([
         fetchScripts(getUsedExtensions(vm)),
-        vm.saveProjectSb3('arraybuffer')
+        vm.saveProject3dsb('arraybuffer')
     ]);
-    const projectBase64 = await arrayBufferToBase64(sb3);
+    const projectBase64 = await arrayBufferToBase64(project);
     return {
         ...scripts,
-        sb3,
+        project,
         data: makeDataScript(title, projectBase64, getUsedFonts(vm))
     };
 };
@@ -198,12 +205,12 @@ export const exportHTML = async (vm, title) => {
 /**
  * Download the project as a ZIP with index.html, the player and the project as separate files,
  * plus music.js and three.js when the project uses those extensions.
- * The project is stored as JS instead of .sb3 so that opening index.html from file:// works.
+ * The project is stored as JS instead of .3dsb so that opening index.html from file:// works.
  * @param {VirtualMachine} vm VM with the project to export
  * @param {string} title Project title
  */
 export const exportZip = async (vm, title) => {
-    const {optional, data, player, sb3} = await prepareExport(vm, title);
+    const {optional, data, player, project} = await prepareExport(vm, title);
     const zip = new JSZip();
     zip.file('index.html', makeHTML(title, [
         ...optional.map(i => `${i.name}.js`),
@@ -217,7 +224,7 @@ export const exportZip = async (vm, title) => {
     }
     zip.file('project.js', data);
     zip.file('player.js', player);
-    zip.file('project.sb3', sb3);
+    zip.file('project.3dsb', project);
     const blob = await zip.generateAsync({
         type: 'blob',
         compression: 'DEFLATE'

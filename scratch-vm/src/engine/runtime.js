@@ -21,6 +21,7 @@ const xmlEscape = require('../util/xml-escape');
 const ScratchLinkWebSocket = require('../util/scratch-link-websocket');
 const FontManager = require('./tw-font-manager');
 const FileManager = require('./tw-file-manager');
+const Scene3D = require('./scene-3d');
 const fetchWithTimeout = require('../util/fetch-with-timeout');
 const platform = require('./tw-platform.js');
 const safeStringify = require('../util/tw-safe-stringify.js');
@@ -539,6 +540,12 @@ class Runtime extends EventEmitter {
         this.fontManager = new FontManager(this);
 
         this.fileManager = new FileManager(this);
+
+        /**
+         * The 3D scene: 3D sprites, procedural objects, camera and environment.
+         * @type {Scene3D}
+         */
+        this.scene3D = new Scene3D(this);
 
         /**
          * Maps extension ID to a JSON-serializable value.

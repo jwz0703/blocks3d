@@ -283,6 +283,7 @@ class RenderWebGL extends EventEmitter {
          * @type {?function(WebGLRenderingContext): void}
          */
         this._underlay = null;
+        this._underlayLayerGroup = null;
 
         /**
          * Whether projects should be able to access the contents of private skins such as webcams.
@@ -388,13 +389,15 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
-     * tw: Set a function that draws into the stage framebuffer below every drawable, or null to remove it.
+     * tw: Set a function that draws into the stage framebuffer below drawables, or null to remove it.
      * It is called with the stage framebuffer bound and the viewport covering the whole canvas. It may change any
      * GL state; the renderer restores what it needs afterwards (callers using three.js should resetState()).
      * @param {?function(WebGLRenderingContext): void} underlay the function
+     * @param {string} [beforeLayerGroup] draw it right before this layer group instead of below every drawable
      */
-    setUnderlay (underlay) {
+    setUnderlay (underlay, beforeLayerGroup) {
         this._underlay = underlay;
+        this._underlayLayerGroup = beforeLayerGroup || null;
         this.dirty = true;
     }
 
@@ -968,19 +971,28 @@ class RenderWebGL extends EventEmitter {
         );
         gl.clear(gl.COLOR_BUFFER_BIT);
 
+        const snapshotRequested = this._snapshotCallbacks.length > 0;
+        const drawOptions = {
+            framebufferWidth: gl.canvas.width,
+            framebufferHeight: gl.canvas.height,
+            skipPrivateSkins: snapshotRequested
+        };
         if (this._underlay) {
+            const group = this._underlayLayerGroup && this._layerGroups[this._underlayLayerGroup];
+            const splitAt = group ? group.drawListOffset : 0;
+            if (splitAt > 0) {
+                this._drawThese(this._drawList.slice(0, splitAt), ShaderManager.DRAW_MODE.default,
+                    this._projection, drawOptions);
+            }
             this._underlay(gl);
             twgl.bindFramebufferInfo(gl, null);
             gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
             this._setDefaultGLState();
+            this._drawThese(splitAt > 0 ? this._drawList.slice(splitAt) : this._drawList,
+                ShaderManager.DRAW_MODE.default, this._projection, drawOptions);
+        } else {
+            this._drawThese(this._drawList, ShaderManager.DRAW_MODE.default, this._projection, drawOptions);
         }
-
-        const snapshotRequested = this._snapshotCallbacks.length > 0;
-        this._drawThese(this._drawList, ShaderManager.DRAW_MODE.default, this._projection, {
-            framebufferWidth: gl.canvas.width,
-            framebufferHeight: gl.canvas.height,
-            skipPrivateSkins: snapshotRequested
-        });
         if (snapshotRequested) {
             const snapshot = gl.canvas.toDataURL();
             this._snapshotCallbacks.forEach(cb => cb(snapshot));

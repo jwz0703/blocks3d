@@ -50,6 +50,18 @@ class Sprite {
          */
         this.clones = [];
 
+        /**
+         * '2d' or '3d'. 3D sprites and their clones are Target3D.
+         * @type {string}
+         */
+        this.kind = '2d';
+        /**
+         * Models of a 3D sprite, shared by its clones, e.g. {name: 'cube', shape: 'cube'} or
+         * {name: 'car', file: 'car.glb'} (a file in the Files tab).
+         * @type {Array.<object>}
+         */
+        this.models = [];
+
         this.soundBank = null;
         if (this.runtime && this.runtime.audioEngine) {
             this.soundBank = this.runtime.audioEngine.createBank();
@@ -107,7 +119,9 @@ class Sprite {
      * @returns {!RenderedTarget} Newly created clone.
      */
     createClone (optLayerGroup) {
-        const newClone = new RenderedTarget(this, this.runtime);
+        // Required here because target-3d requires rendered-target, which is also required by this file
+        const TargetClass = this.kind === '3d' ? require('./target-3d') : RenderedTarget;
+        const newClone = new TargetClass(this, this.runtime);
         newClone.isOriginal = this.clones.length === 0;
         this.clones.push(newClone);
         newClone.initAudio();
@@ -137,6 +151,8 @@ class Sprite {
 
     duplicate () {
         const newSprite = new Sprite(null, this.runtime);
+        newSprite.kind = this.kind;
+        newSprite.models = this.models.map(model => Object.assign({}, model));
         const blocksContainer = this.blocks._blocks;
         const originalBlocks = Object.keys(blocksContainer).map(key => blocksContainer[key]);
         const copiedBlocks = JSON.parse(JSON.stringify(originalBlocks));

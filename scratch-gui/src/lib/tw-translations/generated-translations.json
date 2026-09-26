@@ -2067,7 +2067,7 @@
         "tw.settingsModal.removeMiscLimits": "その他の制限を解除",
         "tw.settingsModal.removeMiscLimitsHelp": "効果音の制限とペンの大きさの制限を解除する",
         "tw.settingsModal.storeProjectOptions": "高度な設定を保存する",
-        "tw.settingsModal.storeProjectOptionsHelp": "選択した設定をプロジェクトに保存し、TurboWarpがこのプロジェクトを読み込んだときに自動的に適用されるようにします。Warpタイマーとコンパイラの無効化の設定は保存されません。",
+        "tw.settingsModal.storeProjectOptionsHelp": "選択した設定をプロジェクトに保存し、{APP_NAME}がこのプロジェクトを読み込んだときに自動的に適用されるようにします。Warpタイマーとコンパイラの無効化の設定は保存されません。",
         "tw.settingsModal.title": "高度な設定",
         "tw.settingsModal.warpTimer": "Warpタイマー",
         "tw.settingsModal.warpTimerHelp": "スクリプトが長いループや無限ループに陥っているかどうかをチェックし、ループが終了するまで動けないのを避け、低いフレームレートで実行するようにします。これにより、ほとんどのクラッシュが修正されます。しかし、パフォーマンスへの影響が大きいため、デフォルトではエディタでのみ有効になっています。",
@@ -4706,6 +4706,8 @@
         "tw.viewOnScratch": "Xem dự án trên Scratch"
     },
     "zh-cn": {
+        "b3d.guiDefaultTitle": "用积木制作 3D 作品",
+        "b3d.home.description": "{APP_NAME} 是用积木制作 3D 游戏和作品的编辑器，也能打开 Scratch 项目：在上方输入项目 ID 或网址，或从下方挑选精选项目。",
         "tw.accent.blue": "蓝色",
         "tw.accent.purple": "紫色",
         "tw.accent.rainbow": "彩虹色",
@@ -4932,7 +4934,7 @@
         "tw.settingsModal.removeMiscLimits": "移除其他限制",
         "tw.settingsModal.removeMiscLimitsHelp": "取消音效范围限制和画笔大小限制。",
         "tw.settingsModal.storeProjectOptions": "在作品中保留设置",
-        "tw.settingsModal.storeProjectOptionsHelp": "在作品文件中储存已选择的设置，它们会在 TurboWarp 加载作品文件时自动被应用。循环计时器和不使用编译不会被保存。",
+        "tw.settingsModal.storeProjectOptionsHelp": "在作品文件中储存已选择的设置，它们会在 {APP_NAME} 加载作品文件时自动被应用。循环计时器和不使用编译不会被保存。",
         "tw.settingsModal.title": "高级设置",
         "tw.settingsModal.warpTimer": "循环计时器",
         "tw.settingsModal.warpTimerHelp": "让脚本检查它们是否卡在长循环或无限循环中，并以低帧率运行，从而避免它们在循环结束前使浏览器假死。这会解决大多数崩溃，但对性能有很大负面影响，所以它只在编辑器中默认启用。",
@@ -4970,6 +4972,8 @@
         "tw.viewOnScratch": "在 Scratch 网站上查看作品"
     },
     "zh-tw": {
+        "b3d.guiDefaultTitle": "用積木製作 3D 作品",
+        "b3d.home.description": "{APP_NAME} 是用積木製作 3D 遊戲和作品的編輯器，也能開啟 Scratch 專案：在上方輸入專案 ID 或網址，或從下方挑選精選專案。",
         "tw.alerts.lostPeripheralConnection": "與{extensionName}的連線中斷了。",
         "tw.backpack.rename": "新名稱:",
         "tw.blocks.addons": "擴充功能",

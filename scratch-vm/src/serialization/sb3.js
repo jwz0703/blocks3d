@@ -1503,7 +1503,8 @@ const checkPlatformCompatibility = (json, runtime) => {
     }
 
     const projectPlatform = json.meta.platform.name;
-    if (projectPlatform === runtime.platform.name) {
+    // Projects saved before the fork was renamed say TurboWarp.
+    if (projectPlatform === runtime.platform.name || projectPlatform === 'TurboWarp') {
         return;
     }
 

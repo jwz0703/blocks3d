@@ -1,6 +1,6 @@
-# my-turbowarp
+# Blocks3D
 
-A personal fork of [TurboWarp](https://turbowarp.org) with **no extension sandbox**.
+A block-based editor for 3D projects, forked from [TurboWarp](https://turbowarp.org) (see `ROADMAP.md`). It has **no extension sandbox**.
 
 - Every custom extension (URL, file or pasted text) runs **unsandboxed**; the option cannot be changed.
 - Extensions saved inside a project load automatically, with no prompt.
@@ -74,6 +74,7 @@ npm run build      # outputs to scratch-gui/build/
 - `looks_log`: block definition in `scratch-gui/src/lib/blocks.js`, toolbox in `make-toolbox-xml.js`, interpreter in `scratch-vm/src/blocks/scratch3_looks.js`, and run by the compiler through `compat-blocks.js`
 - `scratch-vm/src/extensions/tw_local_vars/` (`twlocalvars`): local variables, loaded via `CORE_EXTENSIONS`. The interpreter keeps them on the stack frame that holds the call's parameters (`locals` in `engine/thread.js`, reset in `scratch3_procedures.js`); the compiler turns them into a `Map` created at the start of each generated function (`irgen.js`, `jsgen.js`, `enums.js`, `localGet` in `jsexecute.js`). `make-toolbox-xml.js` hides the category and `containers/blocks.jsx` inserts its blocks under the return block by replacing `ScratchBlocks.Procedures.flyoutCategory` (category callbacks are shared by all workspaces, so registering one only on the main workspace gets overwritten by the Make a Block dialog)
 - `scratch-gui/src/playground/standalone.js` + the `standalone` config in `webpack.config.js`: single-file player (`build/js/standalone.js`, always minified) used by `src/lib/tw-standalone-export.js`. It uses scratch-vm, scratch-render and scratch-audio directly, not the GUI. Modules in `src/lib/tw-standalone/` replace the parts most projects don't need; the music samples and three.js are built separately (`standalone-music.js`, `standalone-three.js`) and only exported with projects whose blocks use those extensions
+- Branding: `scratch-gui/src/lib/brand.js` (`APP_NAME` = Blocks3D, used by the page titles in `webpack.config.js` and most UI text), logo `components/menu-bar/blocks3d-logo.svg` (shown at the left of the menu bar; also `static/favicon.svg`), `static/favicon.ico` and `static/images/*.png`, `static/manifest.webmanifest`. The homepage footer only keeps the disclaimers and Credits, and the menu bar feedback button is gone. `scratch-vm/src/engine/tw-platform.js` says Blocks3D; projects whose platform is TurboWarp still load without the unknown platform warning (`sb3.js`)
 
 ## License
 

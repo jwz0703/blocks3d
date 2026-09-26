@@ -14,7 +14,7 @@
 
 1. ✅ 替整個 repo 做第一次 commit（目前完全沒有 commit），並在 README 記下三個 package 分出來時對應的上游 commit。之後不再合併上游，只挑需要的修正手動移植。
 2. 決定產品名稱，把介面、網頁標題、logo 裡的 Scratch / TurboWarp 名稱和圖示換掉（避免商標問題）。
-3. 授權：`scratch-gui` 是 GPL-3.0，所以只要公開發布，整個產品就必須以 GPL-3.0 開源；`scratch-vm` / `scratch-render` 是 MPL-2.0，修改過的檔案維持 MPL。保留原本的 LICENSE 和來源標示。
+3. ✅ 授權：`scratch-gui` 是 GPL-3.0，所以只要公開發布，整個產品就必須以 GPL-3.0 開源；`scratch-vm` / `scratch-render` 是 MPL-2.0，修改過的檔案維持 MPL。保留原本的 LICENSE 和來源標示。
 
 ## 階段 1：`.3dsb` 檔案格式
 

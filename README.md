@@ -75,4 +75,8 @@ npm run build      # outputs to scratch-gui/build/
 - `scratch-vm/src/extensions/tw_local_vars/` (`twlocalvars`): local variables, loaded via `CORE_EXTENSIONS`. The interpreter keeps them on the stack frame that holds the call's parameters (`locals` in `engine/thread.js`, reset in `scratch3_procedures.js`); the compiler turns them into a `Map` created at the start of each generated function (`irgen.js`, `jsgen.js`, `enums.js`, `localGet` in `jsexecute.js`). `make-toolbox-xml.js` hides the category and `containers/blocks.jsx` inserts its blocks under the return block by replacing `ScratchBlocks.Procedures.flyoutCategory` (category callbacks are shared by all workspaces, so registering one only on the main workspace gets overwritten by the Make a Block dialog)
 - `scratch-gui/src/playground/standalone.js` + the `standalone` config in `webpack.config.js`: single-file player (`build/js/standalone.js`, always minified) used by `src/lib/tw-standalone-export.js`. It uses scratch-vm, scratch-render and scratch-audio directly, not the GUI. Modules in `src/lib/tw-standalone/` replace the parts most projects don't need; the music samples and three.js are built separately (`standalone-music.js`, `standalone-three.js`) and only exported with projects whose blocks use those extensions
 
-TurboWarp is licensed under GPL-3.0, so this fork is also GPL-3.0.
+## License
+
+- `scratch-gui/` is GPL-3.0 (see `scratch-gui/LICENSE`). Because the interface is GPL-3.0, any public release of the whole product must be open source under GPL-3.0.
+- `scratch-vm/` and `scratch-render/` are MPL-2.0 (see their `LICENSE`). Files changed from upstream stay MPL-2.0; new files may be added under MPL-2.0 too.
+- The upstream `LICENSE` and `TRADEMARK` files are kept as they are, and so are the copyright and source notices of Scratch (MIT Scratch Team) and TurboWarp. The Scratch name, logo and characters are MIT trademarks and must not be used to promote this product.

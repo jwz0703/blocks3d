@@ -5,7 +5,6 @@ import bindAll from 'lodash.bindall';
 import {connect} from 'react-redux';
 import {closeSettingsModal} from '../reducers/modals';
 import SettingsModalComponent from '../components/tw-settings-modal/settings-modal.jsx';
-import {defaultStageSize} from '../reducers/custom-stage-size';
 
 const messages = defineMessages({
     newFramerate: {
@@ -23,14 +22,13 @@ class UsernameModal extends React.Component {
             'handleCustomizeFramerate',
             'handleInterpolationChange',
             'handleWarpTimerChange',
-            'handleStageWidthChange',
-            'handleStageHeightChange',
+            'handleScreenSettingsChange',
             'handleDisableCompilerChange',
             'handleStoreProjectOptions'
         ]);
     }
     handleFramerateChange (e) {
-        this.props.vm.setFramerate(e.target.checked ? 60 : 30);
+        this.props.vm.setFramerate(e.target.checked ? 30 : 60);
     }
     async handleCustomizeFramerate () {
         // prompt() returns Promise in desktop app
@@ -54,11 +52,8 @@ class UsernameModal extends React.Component {
             enabled: !e.target.checked
         });
     }
-    handleStageWidthChange (value) {
-        this.props.vm.setStageSize(value, this.props.customStageSize.height);
-    }
-    handleStageHeightChange (value) {
-        this.props.vm.setStageSize(this.props.customStageSize.width, value);
+    handleScreenSettingsChange (settings) {
+        this.props.vm.setScreenSettings(settings);
     }
     handleStoreProjectOptions () {
         this.props.vm.storeProjectOptions();
@@ -78,15 +73,8 @@ class UsernameModal extends React.Component {
                 onCustomizeFramerate={this.handleCustomizeFramerate}
                 onInterpolationChange={this.handleInterpolationChange}
                 onWarpTimerChange={this.handleWarpTimerChange}
-                onStageWidthChange={this.handleStageWidthChange}
-                onStageHeightChange={this.handleStageHeightChange}
+                onScreenSettingsChange={this.handleScreenSettingsChange}
                 onDisableCompilerChange={this.handleDisableCompilerChange}
-                stageWidth={this.props.customStageSize.width}
-                stageHeight={this.props.customStageSize.height}
-                customStageSizeEnabled={
-                    this.props.customStageSize.width !== defaultStageSize.width ||
-                    this.props.customStageSize.height !== defaultStageSize.height
-                }
                 onStoreProjectOptions={this.handleStoreProjectOptions}
                 {...props}
             />
@@ -102,16 +90,19 @@ UsernameModal.propTypes = {
         setCompilerOptions: PropTypes.func,
         setInterpolation: PropTypes.func,
         setRuntimeOptions: PropTypes.func,
-        setStageSize: PropTypes.func,
+        setScreenSettings: PropTypes.func,
         storeProjectOptions: PropTypes.func
     }),
     isEmbedded: PropTypes.bool,
     framerate: PropTypes.number,
     interpolation: PropTypes.bool,
     warpTimer: PropTypes.bool,
-    customStageSize: PropTypes.shape({
+    screenSettings: PropTypes.shape({
+        mode: PropTypes.string,
         width: PropTypes.number,
-        height: PropTypes.number
+        height: PropTypes.number,
+        renderScale: PropTypes.number,
+        shadows: PropTypes.string
     }),
     disableCompiler: PropTypes.bool
 };
@@ -122,7 +113,7 @@ const mapStateToProps = state => ({
     framerate: state.scratchGui.tw.framerate,
     interpolation: state.scratchGui.tw.interpolation,
     warpTimer: state.scratchGui.tw.compilerOptions.warpTimer,
-    customStageSize: state.scratchGui.customStageSize,
+    screenSettings: state.scratchGui.screen.settings,
     disableCompiler: !state.scratchGui.tw.compilerOptions.enabled
 });
 

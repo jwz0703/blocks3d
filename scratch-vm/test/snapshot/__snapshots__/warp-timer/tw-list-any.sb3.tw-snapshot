@@ -3,33 +3,33 @@
 
 // Sprite2 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["eFlmP1{XC+I1:h0Yln.K"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"list"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 7", target);
-b0.value = [];
-listInsert(b0, "any", "a");
-listInsert(b0, "any", "b");
-listInsert(b0, "any", "c");
-if ((b0.value.length === 3)) {
+dataPath.clear(target, null, b0);
+dataPath.insertItem(target, null, b0, "any", "a");
+dataPath.insertItem(target, null, b0, "any", "b");
+dataPath.insertItem(target, null, b0, "any", "c");
+if ((toNotNaN(+dataPath.length(target, null, b0)) === 3)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
-if (listContains(b0, "a")) {
+if (dataPath.contains(target, null, b0, "a")) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
-if (listContains(b0, "b")) {
+if (dataPath.contains(target, null, b0, "b")) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
-if (listContains(b0, "c")) {
+if (dataPath.contains(target, null, b0, "c")) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
-if (listContains(b0, listGet(b0.value, "any"))) {
+if (dataPath.contains(target, null, b0, dataPath.itemOf(target, null, b0, "any"))) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
-listDelete(b0, "any");
-if ((b0.value.length === 2)) {
+dataPath.deleteItem(target, null, b0, "any");
+if ((toNotNaN(+dataPath.length(target, null, b0)) === 2)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
-if ((("" + listGet(b0.value, "*")).toLowerCase() === "".toLowerCase())) {
+if ((toText(dataPath.itemOf(target, null, b0, "*")).toLowerCase() === "".toLowerCase())) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);

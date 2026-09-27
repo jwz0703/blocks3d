@@ -38,6 +38,7 @@ class Scratch3ControlBlocks {
             control_if_else: this.ifElse,
             control_stop: this.stop,
             control_create_clone_of: this.createClone,
+            control_start_as_clone_id: this.cloneId,
             control_delete_this_clone: this.deleteClone,
             control_get_counter: this.getCounter,
             control_incr_counter: this.incrCounter,
@@ -50,6 +51,11 @@ class Scratch3ControlBlocks {
     getHats () {
         return {
             control_start_as_clone: {
+                restartExistingThreads: false
+            },
+            // "when every frame [update / after update] (dt)", started by Runtime._runFramePhase(). A sprite whose
+            // script of the last frame still runs (e.g. waits) skips it this frame.
+            control_whenframe: {
                 restartExistingThreads: false
             }
         };
@@ -155,9 +161,35 @@ class Scratch3ControlBlocks {
     }
 
     createClone (args, util) {
-        this._createClone(Cast.toString(args.CLONE_OPTION), util.target);
+        this._createClone(Cast.toString(args.CLONE_OPTION), util.target, args.ID);
     }
-    _createClone (cloneOption, target) { // used by compiler
+
+    /**
+     * The id parameter of "when I start as a clone": the id the clone was made with (self.id).
+     * @param {object} args
+     * @param {object} util
+     * @returns {*} id; 0 for originals
+     */
+    cloneId (args, util) {
+        return typeof util.target.cloneId === 'undefined' ? 0 : util.target.cloneId;
+    }
+
+    /**
+     * @param {*} id id given to "create clone of", maybe empty
+     * @param {Sprite} sprite sprite of the new clone
+     * @returns {*} the clone's id: the given one (numbers as numbers), or the sprite's next number
+     */
+    _cloneIdFor (id, sprite) {
+        if (typeof id === 'undefined' || id === null || id === '') {
+            // Numbers start again once every clone is gone, e.g. after the stop sign
+            if (sprite.clones.length <= 2 || !sprite.nextCloneId) sprite.nextCloneId = 1;
+            return sprite.nextCloneId++;
+        }
+        if (typeof id === 'string' && id.trim() !== '' && String(Number(id)) === id) return Number(id);
+        return typeof id === 'object' ? Cast.toString(id) : id;
+    }
+
+    _createClone (cloneOption, target, id) { // used by compiler
         // Set clone target
         let cloneTarget;
         if (cloneOption === '_myself_') {
@@ -172,6 +204,8 @@ class Scratch3ControlBlocks {
         // Create clone
         const newClone = cloneTarget.makeClone();
         if (newClone) {
+            // Before its "when I start as a clone" scripts run, which happens later in this frame
+            newClone.cloneId = this._cloneIdFor(id, newClone.sprite);
             this.runtime.addTarget(newClone);
 
             // Place behind the original target.

@@ -22,6 +22,7 @@ const TargetPane = ({
     hoveredTarget,
     spriteLibraryVisible,
     onActivateBlocksTab,
+    onChangeSprite3D,
     onChangeSpriteDirection,
     onChangeSpriteName,
     onChangeSpriteRotationStyle,
@@ -34,6 +35,8 @@ const TargetPane = ({
     onDuplicateSprite,
     onExportSprite,
     onFileUploadClick,
+    onNew3DSpriteClick,
+    onNewCanvasSpriteClick,
     onNewSpriteClick,
     onPaintSpriteClick,
     onRequestCloseSpriteLibrary,
@@ -60,6 +63,7 @@ const TargetPane = ({
             spriteFileInput={fileInputRef}
             sprites={sprites}
             stageSize={stageSize}
+            onChangeSprite3D={onChangeSprite3D}
             onChangeSpriteDirection={onChangeSpriteDirection}
             onChangeSpriteName={onChangeSpriteName}
             onChangeSpriteRotationStyle={onChangeSpriteRotationStyle}
@@ -72,6 +76,8 @@ const TargetPane = ({
             onDuplicateSprite={onDuplicateSprite}
             onExportSprite={onExportSprite}
             onFileUploadClick={onFileUploadClick}
+            onNew3DSpriteClick={onNew3DSpriteClick}
+            onNewCanvasSpriteClick={onNewCanvasSpriteClick}
             onNewSpriteClick={onNewSpriteClick}
             onPaintSpriteClick={onPaintSpriteClick}
             onSelectSprite={onSelectSprite}
@@ -85,6 +91,7 @@ const TargetPane = ({
                     stage.costume.asset
                 }
                 backdropCount={stage.costumeCount}
+                environment={stage.costume && stage.costume.environment}
                 id={stage.id}
                 selected={stage.id === editingTarget}
                 onSelect={onSelectSprite}
@@ -106,6 +113,8 @@ const spriteShape = PropTypes.shape({
     costume: PropTypes.shape({
         // asset is defined in scratch-storage's Asset.js
         asset: PropTypes.object, // eslint-disable-line react/forbid-prop-types
+        // The 3D environment of a backdrop, see the VM's scene-3d-environment.js
+        environment: PropTypes.object, // eslint-disable-line react/forbid-prop-types
         url: PropTypes.string,
         name: PropTypes.string.isRequired,
         // The following are optional because costumes uploaded from disk
@@ -134,6 +143,7 @@ TargetPane.propTypes = {
         receivedBlocks: PropTypes.bool
     }),
     onActivateBlocksTab: PropTypes.func.isRequired,
+    onChangeSprite3D: PropTypes.func,
     onChangeSpriteDirection: PropTypes.func,
     onChangeSpriteName: PropTypes.func,
     onChangeSpriteRotationStyle: PropTypes.func,
@@ -146,6 +156,8 @@ TargetPane.propTypes = {
     onDuplicateSprite: PropTypes.func,
     onExportSprite: PropTypes.func,
     onFileUploadClick: PropTypes.func,
+    onNew3DSpriteClick: PropTypes.func,
+    onNewCanvasSpriteClick: PropTypes.func,
     onNewSpriteClick: PropTypes.func,
     onPaintSpriteClick: PropTypes.func,
     onRequestCloseExtensionLibrary: PropTypes.func,

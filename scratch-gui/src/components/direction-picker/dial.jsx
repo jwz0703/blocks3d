@@ -115,16 +115,18 @@ class Dial extends React.Component {
                         draggable={false}
                         src={dialFace()}
                     />
-                    <svg
-                        className={styles.gauge}
-                        height={radius * 2}
-                        width={radius * 2}
-                    >
-                        <path
-                            className={styles.gaugePath}
-                            d={this.gaugePath(radius, direction)}
-                        />
-                    </svg>
+                    {this.props.showGauge ? (
+                        <svg
+                            className={styles.gauge}
+                            height={radius * 2}
+                            width={radius * 2}
+                        >
+                            <path
+                                className={styles.gaugePath}
+                                d={this.gaugePath(radius, direction)}
+                            />
+                        </svg>
+                    ) : null}
                     <img
                         className={styles.dialHandle}
                         draggable={false}
@@ -145,12 +147,15 @@ class Dial extends React.Component {
 Dial.propTypes = {
     direction: PropTypes.number,
     onChange: PropTypes.func.isRequired,
-    radius: PropTypes.number
+    radius: PropTypes.number,
+    // The gauge measures from up, so it's hidden when up isn't the zero of the value (pitch of 3D sprites)
+    showGauge: PropTypes.bool
 };
 
 Dial.defaultProps = {
     direction: 90, // degrees
-    radius: 56 // px
+    radius: 56, // px
+    showGauge: true
 };
 
 export default Dial;

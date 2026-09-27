@@ -3,10 +3,10 @@
 
 // Sprite2 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
-b0.value = 0;
+dataPath.set(target, null, b0, 0);
 startHats("event_whenbroadcastreceived", { BROADCAST_OPTION: "message1" });
 startHats("event_whenbroadcastreceived", { BROADCAST_OPTION: "message1" });
 thread.timer = timer();
@@ -17,7 +17,7 @@ while (thread.timer.timeElapsed() < a0) {
 yield;
 }
 thread.timer = null;
-if ((toNotNaN(+b0.value) === 1)) {
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 1)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -26,8 +26,8 @@ retire(); return;
 
 // Sprite2 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
-b0.value = (toNotNaN(+b0.value) + 1);
+dataPath.change(target, null, b0, 1);
 retire(); return;
 }; })

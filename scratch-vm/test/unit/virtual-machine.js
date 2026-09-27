@@ -741,6 +741,13 @@ test('comment_create event updates comment with null position', t => {
     t.end();
 });
 
+const sharedPathBlockId = target => Object.keys(target.blocks._blocks)
+    .find(id => target.blocks.getBlock(id).opcode === 'twdata_get');
+const sharedPath = target => {
+    const block = target.blocks.getBlock(sharedPathBlockId(target));
+    return target.blocks.getBlock(block.inputs.PATH.shadow).fields.TEXT.value;
+};
+
 test('shareBlocksToTarget shares global variables without any name changes', t => {
     const vm = new VirtualMachine();
     const runtime = vm.runtime;
@@ -784,11 +791,10 @@ test('shareBlocksToTarget shares global variables without any name changes', t =
         t.type(target.blocks.getBlock('a block').fields.VARIABLE, 'object');
         t.equal(target.blocks.getBlock('a block').fields.VARIABLE.id, 'mock var id');
 
-        const newBlockId = Object.keys(stage.blocks._blocks)[0];
+        // Variable blocks become path blocks when shared (ROADMAP.md 4.12)
+        const newBlockId = sharedPathBlockId(stage);
         t.type(stage.blocks.getBlock(newBlockId), 'object');
-        t.type(stage.blocks.getBlock(newBlockId).fields, 'object');
-        t.type(stage.blocks.getBlock(newBlockId).fields.VARIABLE, 'object');
-        t.equal(stage.blocks.getBlock(newBlockId).fields.VARIABLE.id, 'mock var id');
+        t.equal(sharedPath(stage), 'a mock variable');
 
         // Verify the shared block id is different
         t.notEqual(newBlockId, 'a block');
@@ -847,11 +853,10 @@ test('shareBlocksToTarget shares a local variable to the stage, creating a globa
         t.type(target.blocks.getBlock('a block').fields.VARIABLE, 'object');
         t.equal(target.blocks.getBlock('a block').fields.VARIABLE.id, 'mock var id');
 
-        const newBlockId = Object.keys(stage.blocks._blocks)[0];
+        // Variable blocks become path blocks when shared (ROADMAP.md 4.12)
+        const newBlockId = sharedPathBlockId(stage);
         t.type(stage.blocks.getBlock(newBlockId), 'object');
-        t.type(stage.blocks.getBlock(newBlockId).fields, 'object');
-        t.type(stage.blocks.getBlock(newBlockId).fields.VARIABLE, 'object');
-        t.equal(stage.blocks.getBlock(newBlockId).fields.VARIABLE.id, 'StageVarFromLocal_mock var id');
+        t.equal(sharedPath(stage), stage.variables['StageVarFromLocal_mock var id'].name);
 
         // Verify that a new global variable was created, the old one still exists on
         // the target and still has the same name and value, and the new one has
@@ -922,11 +927,10 @@ test('shareBlocksToTarget chooses a fresh name for a new global variable checkin
         t.type(target.blocks.getBlock('a block').fields.VARIABLE, 'object');
         t.equal(target.blocks.getBlock('a block').fields.VARIABLE.id, 'mock var id');
 
-        const newBlockId = Object.keys(stage.blocks._blocks)[0];
+        // Variable blocks become path blocks when shared (ROADMAP.md 4.12)
+        const newBlockId = sharedPathBlockId(stage);
         t.type(stage.blocks.getBlock(newBlockId), 'object');
-        t.type(stage.blocks.getBlock(newBlockId).fields, 'object');
-        t.type(stage.blocks.getBlock(newBlockId).fields.VARIABLE, 'object');
-        t.equal(stage.blocks.getBlock(newBlockId).fields.VARIABLE.id, 'StageVarFromLocal_mock var id');
+        t.equal(sharedPath(stage), stage.variables['StageVarFromLocal_mock var id'].name);
 
         // Verify that a new global variable was created, the old one still exists on
         // the target and still has the same name and value, and the new one has

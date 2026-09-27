@@ -34,6 +34,7 @@
     "statements": 70
   },
   "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
     "@turbowarp/json": "^0.1.2",
     "@turbowarp/jszip": "^3.11.0",
     "@turbowarp/nanolog": "^0.2.0",

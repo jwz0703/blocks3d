@@ -4,9 +4,10 @@ import {MAXIMUM_CLOUD_VARIABLES} from '../lib/tw-cloud-limits';
 
 const SET_VM = 'scratch-gui/vm/SET_VM';
 const defaultVM = new VM();
-defaultVM.setCompatibilityMode(true);
 defaultVM.runtime.cloudOptions.limit = MAXIMUM_CLOUD_VARIABLES;
 defaultVM.attachStorage(storage);
+// Imported .sb3 projects get a camera sprite to edit the view with
+defaultVM.addCameraOnImport = true;
 const initialState = defaultVM;
 
 const reducer = function (state, action) {

@@ -4,6 +4,7 @@ import {defineMessages, injectIntl, intlShape} from 'react-intl';
 
 import Box from '../box/box.jsx';
 import SpriteInfo from '../../containers/sprite-info.jsx';
+import SpriteInfo3D from '../tw-3d/sprite-info-3d.jsx';
 import SpriteList from './sprite-list.jsx';
 import ActionMenu from '../action-menu/action-menu.jsx';
 import {STAGE_DISPLAY_SIZES} from '../../lib/layout-constants';
@@ -16,6 +17,8 @@ import paintIcon from '../action-menu/icon--paint.svg';
 import spriteIcon from '../action-menu/icon--sprite.svg';
 import surpriseIcon from '../action-menu/icon--surprise.svg';
 import searchIcon from '../action-menu/icon--search.svg';
+import icon3D from '../action-menu/icon--3d.svg';
+import iconCanvas from '../action-menu/icon--canvas.svg';
 
 const messages = defineMessages({
     addSpriteFromLibrary: {
@@ -45,6 +48,7 @@ const SpriteSelectorComponent = function (props) {
         editingTarget,
         hoveredTarget,
         intl,
+        onChangeSprite3D,
         onChangeSpriteDirection,
         onChangeSpriteName,
         onChangeSpriteRotationStyle,
@@ -57,6 +61,8 @@ const SpriteSelectorComponent = function (props) {
         onDuplicateSprite,
         onExportSprite,
         onFileUploadClick,
+        onNew3DSpriteClick,
+        onNewCanvasSpriteClick,
         onNewSpriteClick,
         onPaintSpriteClick,
         onSelectSprite,
@@ -81,24 +87,46 @@ const SpriteSelectorComponent = function (props) {
             {...componentProps}
         >
 
-            <SpriteInfo
-                direction={selectedSprite.direction}
-                disabled={spriteInfoDisabled}
-                name={selectedSprite.name}
-                rotationStyle={selectedSprite.rotationStyle}
-                size={selectedSprite.size}
-                stageSize={stageSize}
-                visible={selectedSprite.visible}
-                x={selectedSprite.x}
-                y={selectedSprite.y}
-                onChangeDirection={onChangeSpriteDirection}
-                onChangeName={onChangeSpriteName}
-                onChangeRotationStyle={onChangeSpriteRotationStyle}
-                onChangeSize={onChangeSpriteSize}
-                onChangeVisibility={onChangeSpriteVisibility}
-                onChangeX={onChangeSpriteX}
-                onChangeY={onChangeSpriteY}
-            />
+            {selectedSprite.kind === '3d' || selectedSprite.kind === 'camera' ? (
+                <SpriteInfo3D
+                    active={selectedSprite.active}
+                    disabled={spriteInfoDisabled}
+                    fov={selectedSprite.fov}
+                    isCamera={selectedSprite.kind === 'camera'}
+                    name={selectedSprite.name}
+                    rotationX={selectedSprite.rotationX}
+                    rotationY={selectedSprite.rotationY}
+                    rotationZ={selectedSprite.rotationZ}
+                    scaleX={selectedSprite.scaleX}
+                    scaleY={selectedSprite.scaleY}
+                    scaleZ={selectedSprite.scaleZ}
+                    visible={selectedSprite.visible}
+                    x={selectedSprite.x}
+                    y={selectedSprite.y}
+                    z={selectedSprite.z}
+                    onChange={onChangeSprite3D}
+                    onChangeName={onChangeSpriteName}
+                />
+            ) : (
+                <SpriteInfo
+                    direction={selectedSprite.direction}
+                    disabled={spriteInfoDisabled}
+                    name={selectedSprite.name}
+                    rotationStyle={selectedSprite.rotationStyle}
+                    size={selectedSprite.size}
+                    stageSize={stageSize}
+                    visible={selectedSprite.visible}
+                    x={selectedSprite.x}
+                    y={selectedSprite.y}
+                    onChangeDirection={onChangeSpriteDirection}
+                    onChangeName={onChangeSpriteName}
+                    onChangeRotationStyle={onChangeSpriteRotationStyle}
+                    onChangeSize={onChangeSpriteSize}
+                    onChangeVisibility={onChangeSpriteVisibility}
+                    onChangeX={onChangeSpriteX}
+                    onChangeY={onChangeSpriteY}
+                />
+            )}
 
             <SpriteList
                 editingTarget={editingTarget}
@@ -117,6 +145,14 @@ const SpriteSelectorComponent = function (props) {
                 img={spriteIcon}
                 moreButtons={[
                     {
+                        title: '新增 3D 角色',
+                        img: icon3D,
+                        onClick: onNew3DSpriteClick
+                    }, {
+                        title: '新增畫布角色',
+                        img: iconCanvas,
+                        onClick: onNewCanvasSpriteClick
+                    }, {
                         title: intl.formatMessage(messages.addSpriteFromFile),
                         img: fileUploadIcon,
                         onClick: onFileUploadClick,
@@ -153,6 +189,7 @@ SpriteSelectorComponent.propTypes = {
         receivedBlocks: PropTypes.bool
     }),
     intl: intlShape.isRequired,
+    onChangeSprite3D: PropTypes.func,
     onChangeSpriteDirection: PropTypes.func,
     onChangeSpriteName: PropTypes.func,
     onChangeSpriteRotationStyle: PropTypes.func,
@@ -165,6 +202,8 @@ SpriteSelectorComponent.propTypes = {
     onDuplicateSprite: PropTypes.func,
     onExportSprite: PropTypes.func,
     onFileUploadClick: PropTypes.func,
+    onNew3DSpriteClick: PropTypes.func,
+    onNewCanvasSpriteClick: PropTypes.func,
     onNewSpriteClick: PropTypes.func,
     onPaintSpriteClick: PropTypes.func,
     onSelectSprite: PropTypes.func,

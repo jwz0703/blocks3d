@@ -7,14 +7,27 @@ import {stageSizeToTransform} from '../../lib/screen-utils';
 
 import styles from './monitor-list.css';
 
-const MonitorList = props => (
-    <Box
+/**
+ * Monitors are placed in stage units divided by the UI scale, so that they are as big compared to the stage as on
+ * a 480x360 stage however big the reference size of the screen is (scratch-vm engine/screen.js)
+ * @param {object} stageSize see getStageDimensions
+ * @param {number} uiScale see reducers/screen.js
+ * @returns {object} the size of the space the monitors are placed in
+ */
+const getMonitorSpace = (stageSize, uiScale) => Object.assign({}, stageSize, {
+    widthDefault: stageSize.widthDefault / uiScale,
+    heightDefault: stageSize.heightDefault / uiScale
+});
+
+const MonitorList = props => {
+    const space = getMonitorSpace(props.stageSize, props.uiScale || 1);
+    return (<Box
         // Use static `monitor-overlay` class for bounds of draggables
         className={classNames(styles.monitorList, 'monitor-overlay', styles.monitorListScaler)}
         style={{
-            width: props.stageSize.widthDefault,
-            height: props.stageSize.heightDefault,
-            ...stageSizeToTransform(props.stageSize)
+            width: space.widthDefault,
+            height: space.heightDefault,
+            ...stageSizeToTransform(space)
         }}
     >
         {props.monitors && props.monitors.valueSeq().filter(m => m.visible)
@@ -39,8 +52,8 @@ const MonitorList = props => (
                     onDragEnd={props.onMonitorChange}
                 />
             ))}
-    </Box>
-);
+    </Box>);
+};
 
 MonitorList.propTypes = {
     draggable: PropTypes.bool.isRequired,
@@ -48,6 +61,7 @@ MonitorList.propTypes = {
         valueSeq: PropTypes.func
     }),
     onMonitorChange: PropTypes.func.isRequired,
+    uiScale: PropTypes.number,
     stageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number,

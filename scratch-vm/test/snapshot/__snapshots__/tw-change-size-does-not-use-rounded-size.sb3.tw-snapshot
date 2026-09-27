@@ -3,17 +3,17 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
 target.setSize(96);
-b0.value = 0;
+dataPath.set(target, null, b0, 0);
 while (!(100 === Math.round(target.size))) {
-b0.value = (toNotNaN(+b0.value) + 1);
+dataPath.change(target, null, b0, 1);
 target.setSize(target.size + ((100 - Math.round(target.size)) / 10));
 yield;
 }
-if ((toNotNaN(+b0.value) === 20)) {
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 20)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);

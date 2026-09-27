@@ -455,6 +455,8 @@ class RenderedTarget extends Target {
                 this.runtime.requestRedraw();
             }
         }
+        // Every backdrop has its own 3D environment
+        if (this.isStage && this.runtime.scene3D) this.runtime.scene3D.onBackdropChanged();
         this.runtime.requestTargetsUpdate(this);
     }
 
@@ -721,6 +723,30 @@ class RenderedTarget extends Target {
     }
 
     /**
+     * @param {string} property a property of the "[property] of [sprite]" block
+     * @returns {*} its value, or undefined if sprites of this kind don't have it (then it is a variable name)
+     */
+    getAttribute (property) {
+        switch (property) {
+        case 'x position': return this.x;
+        case 'y position': return this.y;
+        case 'direction': return this.direction;
+        case 'costume #': return this.currentCostume + 1;
+        case 'costume name': return this.getCostumes()[this.currentCostume].name;
+        case 'size': return this.size;
+        case 'volume': return this.volume;
+        }
+    }
+
+    /**
+     * @returns {{x: number, y: number}} where the target appears on the 2D stage. 3D sprites give where they are
+     * drawn, so that 2D blocks such as "go to" and "distance to" follow them.
+     */
+    getStagePosition () {
+        return {x: this.x, y: this.y};
+    }
+
+    /**
      * Return the rendered target's tight bounding box.
      * Includes top, left, bottom, right attributes in Scratch coordinates.
      * @return {?object} Tight bounding box, or null.
@@ -801,7 +827,8 @@ class RenderedTarget extends Target {
     isTouchingSprite (spriteName) {
         spriteName = Cast.toString(spriteName);
         const firstClone = this.runtime.getSpriteTargetByName(spriteName);
-        if (!firstClone || !this.renderer) {
+        // 2D and 3D sprites never touch each other
+        if (!firstClone || !this.renderer || firstClone.is3D) {
             return false;
         }
         // Filter out dragging targets. This means a sprite that is being dragged

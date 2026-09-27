@@ -304,9 +304,12 @@ test('(#1608) serializeBlocks maintains top level variable reporters', t => {
         .then(() => {
             const blocks = vm.runtime.targets[0].blocks._blocks;
             const result = sb3.serialize(vm.runtime);
-            // Project should have 1 block, a top-level variable reporter
-            t.equal(Object.keys(blocks).length, 1);
+            // Project should have 1 block, a top-level variable reporter; it is a path block now
+            // (ROADMAP.md 4.12), with the path in a shadow
+            t.equal(Object.keys(blocks).length, 2);
+            // (the shadow is saved inside the block)
             t.equal(Object.keys(result.targets[0].blocks).length, 1);
+            t.ok(Object.values(blocks).some(block => block.opcode === 'twdata_get' && block.topLevel));
 
             // Make sure deserializing these blocks works
             t.doesNotThrow(() => {

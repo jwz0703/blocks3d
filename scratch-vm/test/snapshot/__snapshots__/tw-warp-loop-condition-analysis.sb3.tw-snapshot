@@ -3,19 +3,16 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables[";~q(!vt3c.Jrz2M]ZMy]"];
-const b1 = stage.variables[",23fjp~KN1aMG|;66K@Z"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"some list"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
-b0.value = [];
-b0.value.push((1 + 2));
-b0._monitorUpToDate = false;
-b0.value.push((3 + 4));
-b0._monitorUpToDate = false;
-b0.value.push("final");
-b0._monitorUpToDate = false;
+dataPath.clear(target, null, b0);
+dataPath.addItem(target, null, b0, (1 + 2));
+dataPath.addItem(target, null, b0, (3 + 4));
+dataPath.addItem(target, null, b0, "final");
 thread.procedures["Wtest"]();
-if ((b1.value === 4)) {
+if ((toNotNaN(+dataPath.get(target, null, b1)) === 4)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -24,15 +21,15 @@ retire(); return;
 
 // Sprite1 Wtest
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
-const b1 = stage.variables[",23fjp~KN1aMG|;66K@Z"];
-const b2 = stage.variables[";~q(!vt3c.Jrz2M]ZMy]"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
+const b2 = dataPath.makePath({"scope":"global","steps":[{"key":"some list"}]});
 return function funXYZ_test () {
-b0.value = "";
-b1.value = 1;
-while (!(("" + b0.value).toLowerCase() === "final".toLowerCase())) {
-b0.value = (b2.value[b1.value - 1] ?? "");
-b1.value = (b1.value + 1);
+dataPath.set(target, null, b0, "");
+dataPath.set(target, null, b1, 1);
+while (!(toText(dataPath.get(target, null, b0)).toLowerCase() === "final".toLowerCase())) {
+dataPath.set(target, null, b0, dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1)));
+dataPath.change(target, null, b1, 1);
 }
 return "";
 }; })

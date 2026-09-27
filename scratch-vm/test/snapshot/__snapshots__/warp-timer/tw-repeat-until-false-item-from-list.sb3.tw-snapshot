@@ -3,21 +3,19 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["aN^sIH)1L`YhdGV*_C5P"];
-const b1 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"list"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
-b0.value = [];
-b0.value.push(("fal" + "se"));
-b0._monitorUpToDate = false;
-b0.value.push((1 === 1));
-b0._monitorUpToDate = false;
-b1.value = 1;
-while (!toBoolean(listGet(b0.value, b1.value))) {
-b1.value = (toNotNaN(+b1.value) + 1);
+dataPath.deleteItem(target, null, b0, "all");
+dataPath.addItem(target, null, b0, ("fal" + "se"));
+dataPath.addItem(target, null, b0, (1 === 1));
+dataPath.set(target, null, b1, 1);
+while (!toBoolean(dataPath.itemOf(target, null, b0, dataPath.get(target, null, b1)))) {
+dataPath.change(target, null, b1, 1);
 yield;
 }
-if ((toNotNaN(+b1.value) === 2)) {
+if ((toNotNaN(+dataPath.get(target, null, b1)) === 2)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);

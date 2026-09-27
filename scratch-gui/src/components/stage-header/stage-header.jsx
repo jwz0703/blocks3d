@@ -9,6 +9,8 @@ import Box from '../box/box.jsx';
 import Button from '../button/button.jsx';
 import ToggleButtons from '../toggle-buttons/toggle-buttons.jsx';
 import Controls from '../../containers/controls.jsx';
+import Stage3DToolbar from '../../containers/tw-stage-3d-toolbar.jsx';
+import ScreenAspectPicker from '../../containers/tw-screen-aspect-picker.jsx';
 import {getStageDimensions, getMinWidth} from '../../lib/screen-utils';
 import {FIXED_WIDTH, STAGE_DISPLAY_SIZES, STAGE_SIZE_MODES} from '../../lib/layout-constants';
 
@@ -141,7 +143,11 @@ const StageHeaderComponent = function (props) {
                     className={styles.stageMenuWrapper}
                     style={{width: stageDimensions.width}}
                 >
-                    <Controls vm={vm} />
+                    {/* Wrapped like in the editor, so that the controls stay mounted when switching: the pause
+                        button addon only adds itself once to them */}
+                    <div className={styles.controlsRow}>
+                        <Controls vm={vm} />
+                    </div>
                     <div
                         className={styles.fullscreenButtonsRow}
                         key="fullscreen" // addons require the HTML element to be not be re-used by in-editor buttons
@@ -172,17 +178,21 @@ const StageHeaderComponent = function (props) {
                 }}
             >
                 <Box className={styles.stageMenuWrapper}>
-                    <Controls
-                        vm={vm}
-                        isSmall={stageDisplayWidth ?
-                            stageDisplayWidth < FIXED_WIDTH * 0.75 :
-                            stageSizeMode === STAGE_SIZE_MODES.small}
-                    />
+                    <div className={styles.controlsRow}>
+                        <Controls
+                            vm={vm}
+                            isSmall={stageDisplayWidth ?
+                                stageDisplayWidth < FIXED_WIDTH * 0.75 :
+                                stageSizeMode === STAGE_SIZE_MODES.small}
+                        />
+                        {isPlayerOnly ? null : <Stage3DToolbar />}
+                    </div>
                     <div
                         className={styles.stageSizeRow}
                         key="editor" // addons require the HTML element to be not be re-used by in-editor buttons
                     >
                         {stageControls}
+                        {isPlayerOnly ? null : <ScreenAspectPicker />}
                         <div>
                             <Button
                                 className={styles.stageButton}

@@ -51,6 +51,12 @@ import gdxforConnectionSmallIconURL from './gdxfor/gdxfor-small.svg';
 
 
 import twIcon from './tw/tw.svg';
+import twVectorIcon from './twvector/twvector.svg';
+import twVectorInsetIcon from './twvector/twvector-small.svg';
+import joystickIcon from './joystick/joystick.svg';
+import joystickInsetIcon from './joystick/joystick-small.svg';
+import three3dIcon from './three3d/three3d.svg';
+import three3dInsetIcon from './three3d/three3d-small.svg';
 import customExtensionIcon from './custom/custom.svg';
 import galleryIcon from './gallery/gallery.svg';
 import {APP_NAME} from '../../brand';
@@ -380,6 +386,36 @@ export default [
                 id="tw.twExtension.description"
             />
         ),
+        incompatibleWithScratch: true,
+        tags: ['tw'],
+        featured: true
+    },
+    {
+        name: '向量',
+        extensionId: 'twvector',
+        iconURL: twVectorIcon,
+        insetIconURL: twVectorInsetIcon,
+        description: '向量 {x, y, z} 的運算：相加、相減、乘以數字、長度、距離、單位向量、內積、外積。',
+        incompatibleWithScratch: true,
+        tags: ['tw'],
+        featured: true
+    },
+    {
+        name: '虛擬搖桿',
+        extensionId: 'joystick',
+        iconURL: joystickIcon,
+        insetIconURL: joystickInsetIcon,
+        description: '手機和平板的觸控搖桿與按鈕，用積木讀取推的方向和力道。電腦上自動改讀 WASD 和方向鍵，同一個專案兩邊都能玩。',
+        incompatibleWithScratch: true,
+        tags: ['tw'],
+        featured: true
+    },
+    {
+        name: '程序物件',
+        extensionId: 'three3d',
+        iconURL: three3dIcon,
+        insetIconURL: three3dInsetIcon,
+        description: '用名稱建立和操作大量 3D 物件，適合程式產生的地形、粒子、迷宮等。',
         incompatibleWithScratch: true,
         tags: ['tw'],
         featured: true

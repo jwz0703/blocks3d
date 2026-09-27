@@ -3,6 +3,13 @@ import {safeStringify} from './tw-safe-stringify.js';
 
 const isUndefined = a => typeof a === 'undefined';
 
+// Built-in 3D blocks look like the core category they replace
+const BUILTIN_3D_CATEGORIES = {
+    motion3d: 'motion',
+    looks3d: 'looks',
+    sensing3d: 'sensing'
+};
+
 /**
  * Convert monitors from VM format to what the GUI needs to render.
  * - Convert opcode to a label and a category
@@ -19,6 +26,13 @@ export default function ({id, mode, spriteName, opcode, params, value, vm}) {
     // Extension monitors get their labels from the Runtime through `getLabelForOpcode`.
     // Other monitors' labels are hard-coded in `OpcodeLabels`.
     let {label, category, labelFn} = (vm && vm.runtime.getLabelForOpcode(opcode)) || OpcodeLabels.getLabel(opcode);
+
+    const category3D = BUILTIN_3D_CATEGORIES[opcode.split('_')[0]];
+    if (category3D) {
+        category = category3D;
+        // "3D 動作: x 座標" -> "x 座標"
+        label = label.replace(/^[^:]*: /, '');
+    }
 
     // Use labelFn if provided for dynamic labelling (e.g. variables)
     if (!isUndefined(labelFn)) label = labelFn(params);

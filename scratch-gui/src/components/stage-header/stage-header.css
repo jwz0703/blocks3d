@@ -37,6 +37,13 @@
     padding-bottom: $space;
 }
 
+.controls-row {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 0.25rem;
+}
+
 .stage-size-row {
     display: flex;
 }
@@ -95,4 +102,22 @@
 .fullscreen-buttons-row {
     /* relied on by addons */
     display: flex;
+}
+
+/* Screen shape the stage is previewed on (tw-screen-aspect-picker.jsx) */
+.aspect-select {
+    height: calc(2rem + 2px);
+    padding: 0 0.25rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $form-radius;
+    background-color: $ui-white;
+    color: $text-primary;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+[dir="ltr"] .aspect-select {
+    margin-right: .2rem;
+}
+[dir="rtl"] .aspect-select {
+    margin-left: .2rem;
 }

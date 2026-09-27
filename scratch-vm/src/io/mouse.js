@@ -49,11 +49,15 @@ class Mouse {
             for (let i = 0; i < this.runtime.targets.length; i++) {
                 const target = this.runtime.targets[i];
                 if (Object.prototype.hasOwnProperty.call(target, 'drawableID') &&
-                    target.drawableID === drawableID) {
+                    target.drawableID === drawableID && !target.isStage) {
                     return target;
                 }
             }
         }
+        // 2D sprites are drawn on top of the 3D scene, so a 3D sprite gets the click if no 2D sprite does
+        const scene3D = this.runtime.scene3D;
+        const target3D = scene3D && scene3D.pickTarget(this._scratchX, this._scratchY);
+        if (target3D) return target3D;
         // Return the stage if no target was found
         return this.runtime.getTargetForStage();
     }

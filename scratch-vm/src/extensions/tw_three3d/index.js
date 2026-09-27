@@ -1,16 +1,12 @@
 const ArgumentType = require('../../extension-support/argument-type');
 const BlockType = require('../../extension-support/block-type');
 const Cast = require('../../util/cast');
-const Color = require('../../util/color');
 const Scene3D = require('../../engine/scene-3d');
-const uid = require('../../util/uid');
 
 // eslint-disable-next-line max-len
 const blockIconURI = `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40"><g stroke="#4b3aa8" stroke-width="2" stroke-linejoin="round"><path fill="#b3a6ff" d="M20 5 34 12.5 20 20 6 12.5z"/><path fill="#8a78ff" d="M6 12.5 20 20v15L6 27.5z"/><path fill="#6c57f0" d="M34 12.5 20 20v15l14-7.5z"/></g></svg>')}`;
 
 const PROPS = ['x', 'y', 'z', 'rotX', 'rotY', 'rotZ', 'scaleX', 'scaleY', 'scaleZ'];
-
-const CAMERA_AXES = ['x', 'y', 'z', 'yaw', 'pitch'];
 
 /**
  * @param {THREE.Material|THREE.Material[]} material
@@ -20,8 +16,8 @@ const asArray = material => (Array.isArray(material) ? material : [material]);
 
 /**
  * Procedural objects: 3D objects that scripts create and change by name, for scenes with many generated objects.
- * Also has the camera, mouse look and environment blocks. Everything happens in the runtime's Scene3D, the same
- * scene as the 3D sprites. The extension ID is still three3d so that older projects keep working.
+ * Everything happens in the runtime's Scene3D, the same scene as the 3D sprites. The camera, mouse look and
+ * environment have their own categories (camera sprites, 相機 and 環境).
  *
  * three.js is only touched through scene3D.THREE after scene3D.ensure(), because the exported player only has it
  * for projects that use 3D.
@@ -45,10 +41,6 @@ class Scratch3Three3DBlocks {
 
     _markDirty () {
         this._scene3D.markDirty();
-    }
-
-    get _camera () {
-        return this._scene3D.camera;
     }
 
     _get (name) {
@@ -164,108 +156,6 @@ class Scratch3Three3DBlocks {
                     blockType: BlockType.REPORTER,
                     text: '[NAME] 的 [PROP]',
                     arguments: {...name, PROP: {type: ArgumentType.STRING, menu: 'prop', defaultValue: 'x'}}
-                },
-                '---',
-                {
-                    opcode: 'setCameraPosition',
-                    blockType: BlockType.COMMAND,
-                    text: '相機位置設為 x:[X] y:[Y] z:[Z]',
-                    arguments: xyz(0, 0, 5)
-                },
-                {
-                    opcode: 'changeCameraPosition',
-                    blockType: BlockType.COMMAND,
-                    text: '相機位置改變 x:[X] y:[Y] z:[Z]',
-                    arguments: xyz(0, 0, -0.1)
-                },
-                {
-                    opcode: 'cameraLookAt',
-                    blockType: BlockType.COMMAND,
-                    text: '相機看向 x:[X] y:[Y] z:[Z]',
-                    arguments: xyz(0, 0, 0)
-                },
-                {
-                    opcode: 'cameraLookAtObject',
-                    blockType: BlockType.COMMAND,
-                    text: '相機看向 [NAME]',
-                    arguments: name
-                },
-                {
-                    opcode: 'setCameraFov',
-                    blockType: BlockType.COMMAND,
-                    text: '相機視角設為 [FOV] 度',
-                    arguments: {FOV: {type: ArgumentType.NUMBER, defaultValue: 60}}
-                },
-                {
-                    opcode: 'getCamera',
-                    blockType: BlockType.REPORTER,
-                    text: '相機的 [AXIS]',
-                    arguments: {AXIS: {type: ArgumentType.STRING, menu: 'axis', defaultValue: 'x'}}
-                },
-                {
-                    opcode: 'moveCamera',
-                    blockType: BlockType.COMMAND,
-                    text: '相機向 [DIR] 移動 [STEPS]',
-                    arguments: {
-                        DIR: {type: ArgumentType.STRING, menu: 'direction', defaultValue: 'forward'},
-                        STEPS: {type: ArgumentType.NUMBER, defaultValue: 0.1}
-                    }
-                },
-                {
-                    opcode: 'setCameraDirection',
-                    blockType: BlockType.COMMAND,
-                    text: '相機方向設為 水平:[YAW] 垂直:[PITCH] 度',
-                    arguments: {
-                        YAW: {type: ArgumentType.NUMBER, defaultValue: 0},
-                        PITCH: {type: ArgumentType.NUMBER, defaultValue: 0}
-                    }
-                },
-                '---',
-                {
-                    opcode: 'enablePointerLock',
-                    blockType: BlockType.COMMAND,
-                    text: '啟用滑鼠視角控制 靈敏度 [SENS]',
-                    arguments: {SENS: {type: ArgumentType.NUMBER, defaultValue: 1}}
-                },
-                {
-                    opcode: 'disablePointerLock',
-                    blockType: BlockType.COMMAND,
-                    text: '停用滑鼠視角控制'
-                },
-                {
-                    opcode: 'isPointerLocked',
-                    blockType: BlockType.BOOLEAN,
-                    text: '滑鼠已鎖定？'
-                },
-                '---',
-                {
-                    opcode: 'setBackground',
-                    blockType: BlockType.COMMAND,
-                    text: '將 3D 背景顏色設為 [COLOR]',
-                    arguments: {COLOR: {type: ArgumentType.COLOR, defaultValue: '#202040'}}
-                },
-                {
-                    opcode: 'clearBackground',
-                    blockType: BlockType.COMMAND,
-                    text: '將 3D 背景設為透明'
-                },
-                {
-                    opcode: 'setAmbient',
-                    blockType: BlockType.COMMAND,
-                    text: '環境光強度設為 [VALUE]',
-                    arguments: {VALUE: {type: ArgumentType.NUMBER, defaultValue: 0.6}}
-                },
-                {
-                    opcode: 'setSun',
-                    blockType: BlockType.COMMAND,
-                    text: '平行光來自 x:[X] y:[Y] z:[Z] 強度 [VALUE]',
-                    arguments: {...xyz(3, 5, 4), VALUE: {type: ArgumentType.NUMBER, defaultValue: 1.2}}
-                },
-                {
-                    opcode: 'setLayerVisible',
-                    blockType: BlockType.COMMAND,
-                    text: '[VISIBLE] 3D 畫面',
-                    arguments: {VISIBLE: {type: ArgumentType.STRING, menu: 'visible', defaultValue: 'show'}}
                 }
             ],
             menus: {
@@ -303,27 +193,6 @@ class Scratch3Three3DBlocks {
                         {text: 'x 縮放', value: 'scaleX'},
                         {text: 'y 縮放', value: 'scaleY'},
                         {text: 'z 縮放', value: 'scaleZ'}
-                    ]
-                },
-                axis: {
-                    acceptReporters: false,
-                    items: [
-                        'x',
-                        'y',
-                        'z',
-                        {text: '水平角度', value: 'yaw'},
-                        {text: '垂直角度', value: 'pitch'}
-                    ]
-                },
-                direction: {
-                    acceptReporters: true,
-                    items: [
-                        {text: '前', value: 'forward'},
-                        {text: '後', value: 'back'},
-                        {text: '左', value: 'left'},
-                        {text: '右', value: 'right'},
-                        {text: '上', value: 'up'},
-                        {text: '下', value: 'down'}
                     ]
                 }
             }
@@ -468,219 +337,6 @@ class Scratch3Three3DBlocks {
         case 'scaleZ': value = mesh.scale.z; break;
         }
         return Math.round(value * 1e6) / 1e6;
-    }
-
-    setCameraPosition (args) {
-        if (!this._ensure()) return;
-        this._camera.position.set(Cast.toNumber(args.X), Cast.toNumber(args.Y), Cast.toNumber(args.Z));
-        this._markDirty();
-    }
-
-    changeCameraPosition (args) {
-        if (!this._ensure()) return;
-        this._camera.position.x += Cast.toNumber(args.X);
-        this._camera.position.y += Cast.toNumber(args.Y);
-        this._camera.position.z += Cast.toNumber(args.Z);
-        this._markDirty();
-    }
-
-    cameraLookAt (args) {
-        if (!this._ensure()) return;
-        this._camera.lookAt(Cast.toNumber(args.X), Cast.toNumber(args.Y), Cast.toNumber(args.Z));
-        this._markDirty();
-    }
-
-    cameraLookAtObject (args) {
-        const mesh = this._get(args.NAME);
-        if (!mesh || !this._ensure()) return;
-        this._camera.lookAt(mesh.position);
-        this._markDirty();
-    }
-
-    setCameraFov (args) {
-        if (!this._ensure()) return;
-        this._camera.fov = Math.min(179, Math.max(1, Cast.toNumber(args.FOV)));
-        this._camera.updateProjectionMatrix();
-        this._markDirty();
-    }
-
-    getCamera (args) {
-        if (!CAMERA_AXES.includes(args.AXIS)) return 0;
-        if (!this._camera) {
-            // No stage yet: the camera the project will start with
-            return this._scene3D.environment.camera[args.AXIS];
-        }
-        const radToDeg = radians => radians * 180 / Math.PI;
-        let value;
-        switch (args.AXIS) {
-        case 'yaw': value = radToDeg(this._camera.rotation.y); break;
-        case 'pitch': value = radToDeg(this._camera.rotation.x); break;
-        default: value = this._camera.position[args.AXIS];
-        }
-        return Math.round(value * 1e6) / 1e6;
-    }
-
-    moveCamera (args) {
-        if (!this._ensure()) return;
-        const steps = Cast.toNumber(args.STEPS);
-        // Forward/back/left/right stay level with the ground, like a first-person game
-        const yaw = this._camera.rotation.y;
-        const forwardX = -Math.sin(yaw);
-        const forwardZ = -Math.cos(yaw);
-        const position = this._camera.position;
-        switch (args.DIR) {
-        case 'forward': position.x += forwardX * steps; position.z += forwardZ * steps; break;
-        case 'back': position.x -= forwardX * steps; position.z -= forwardZ * steps; break;
-        case 'right': position.x -= forwardZ * steps; position.z += forwardX * steps; break;
-        case 'left': position.x += forwardZ * steps; position.z -= forwardX * steps; break;
-        case 'up': position.y += steps; break;
-        case 'down': position.y -= steps; break;
-        default: return;
-        }
-        this._markDirty();
-    }
-
-    setCameraDirection (args) {
-        if (!this._ensure()) return;
-        const pitch = this._degToRad(args.PITCH);
-        this._camera.rotation.set(
-            Math.max(-Scene3D.MAX_PITCH, Math.min(Scene3D.MAX_PITCH, pitch)),
-            this._degToRad(args.YAW),
-            0
-        );
-        this._markDirty();
-    }
-
-    enablePointerLock (args, util) {
-        // Clicking the block in the palette also adds a WASD example script
-        if (util.thread.stackClick && !util.target.blocks.getBlock(util.thread.topBlock)) {
-            this._addExampleScript(util.target);
-        }
-        if (!this._ensure()) return;
-        this._scene3D.setPointerLock(true, Cast.toNumber(args.SENS));
-    }
-
-    disablePointerLock () {
-        this._scene3D.setPointerLock(false);
-    }
-
-    isPointerLocked () {
-        return this._scene3D.isPointerLocked();
-    }
-
-    /**
-     * Add a "green flag → mouse look → WASD/QE every frame" script to the target,
-     * unless it already uses the mouse look block.
-     * @param {Target} target The sprite or stage being edited.
-     */
-    _addExampleScript (target) {
-        const existing = target.blocks._blocks;
-        if (Object.values(existing).some(block => block.opcode === 'three3d_enablePointerLock')) return;
-
-        const blocks = [];
-        const add = (opcode, extra) => {
-            const block = {
-                id: uid(),
-                opcode,
-                inputs: {},
-                fields: {},
-                next: null,
-                parent: null,
-                shadow: false,
-                topLevel: false,
-                ...extra
-            };
-            blocks.push(block);
-            return block;
-        };
-        const shadow = (opcode, field, value) => add(opcode, {
-            shadow: true,
-            fields: field ? {[field]: {name: field, value}} : {}
-        });
-        const input = (parent, name, block, obscured = null) => {
-            parent.inputs[name] = {name, block: block.id, shadow: block.shadow ? block.id : obscured && obscured.id};
-            block.parent = parent.id;
-            if (obscured) obscured.parent = parent.id;
-        };
-        const chain = list => {
-            for (let i = 1; i < list.length; i++) {
-                list[i - 1].next = list[i].id;
-                list[i].parent = list[i - 1].id;
-            }
-        };
-
-        let x = 0;
-        for (const id of target.blocks.getScripts()) {
-            x = Math.max(x, (existing[id].x || 0) + 450);
-        }
-
-        const hat = add('event_whenflagclicked', {topLevel: true, x, y: 0});
-        const enable = add('three3d_enablePointerLock');
-        input(enable, 'SENS', shadow('math_number', 'NUM', '1'));
-        const loop = add('control_foreachframe');
-        input(loop, 'DT', shadow('control_foreachframe_deltatime'));
-        chain([hat, enable, loop]);
-
-        const ifs = [
-            ['w', 'forward'],
-            ['s', 'back'],
-            ['a', 'left'],
-            ['d', 'right'],
-            ['q', 'up'],
-            ['e', 'down']
-        ].map(([key, dir]) => {
-            const ifBlock = add('control_if');
-            const pressed = add('sensing_keypressed');
-            input(pressed, 'KEY_OPTION', shadow('sensing_keyoptions', 'KEY_OPTION', key));
-            input(ifBlock, 'CONDITION', pressed);
-            const move = add('three3d_moveCamera');
-            input(move, 'DIR', shadow('three3d_menu_direction', 'direction', dir));
-            const multiply = add('operator_multiply');
-            input(multiply, 'NUM1', shadow('math_number', 'NUM', '5'));
-            input(multiply, 'NUM2', add('control_foreachframe_deltatime'), shadow('math_number', 'NUM', ''));
-            input(move, 'STEPS', multiply, shadow('math_number', 'NUM', '0.1'));
-            input(ifBlock, 'SUBSTACK', move);
-            return ifBlock;
-        });
-        chain(ifs);
-        input(loop, 'SUBSTACK', ifs[0]);
-
-        for (const block of blocks) {
-            target.blocks.createBlock(block);
-        }
-        // Let the click finish before the editor reloads the workspace
-        setTimeout(() => this.runtime.emit('BLOCKS_NEED_UPDATE'));
-    }
-
-    setBackground (args) {
-        const rgb = Cast.toRgbColorObject(args.COLOR);
-        this._ensure();
-        this._scene3D.setEnvironment({background: {type: 'color', color: Color.rgbToHex(rgb)}});
-    }
-
-    clearBackground () {
-        this._ensure();
-        this._scene3D.setEnvironment({background: {type: 'none'}});
-    }
-
-    setAmbient (args) {
-        this._ensure();
-        this._scene3D.setEnvironment({ambient: {intensity: Math.max(0, Cast.toNumber(args.VALUE))}});
-    }
-
-    setSun (args) {
-        this._ensure();
-        this._scene3D.setEnvironment({sun: {
-            x: Cast.toNumber(args.X),
-            y: Cast.toNumber(args.Y),
-            z: Cast.toNumber(args.Z),
-            intensity: Math.max(0, Cast.toNumber(args.VALUE))
-        }});
-    }
-
-    setLayerVisible (args) {
-        if (!this._ensure()) return;
-        this._scene3D.setLayerVisible(args.VISIBLE !== 'hide');
     }
 }
 

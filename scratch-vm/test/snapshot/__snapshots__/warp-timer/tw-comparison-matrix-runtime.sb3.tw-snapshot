@@ -12,31 +12,31 @@ retire(); return;
 
 // Sprite1 Wrun test
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["mfV;yS}9e:%h5UZ)QyiY"];
-const b1 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
-const b2 = stage.variables["n^wm8jw#b24sggt.S^tD"];
-const b3 = stage.variables["_]6^lq+-%H0{ov`tKt7$"];
-const b4 = stage.variables["3lyKRepBc$tx)EWlpr!y"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"n"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
+const b2 = dataPath.makePath({"scope":"global","steps":[{"key":"values"}]});
+const b3 = dataPath.makePath({"scope":"global","steps":[{"key":"j"}]});
+const b4 = dataPath.makePath({"scope":"global","steps":[{"key":"expected"}]});
 return function* genXYZ_run_test () {
 thread.procedures["Wsetup values"]();
-b0.value = 0;
-b1.value = 0;
-for (var a0 = b2.value.length; a0 > 0; a0--) {
-b1.value = (toNotNaN(+b1.value) + 1);
-b3.value = 0;
-for (var a1 = b2.value.length; a1 > 0; a1--) {
-b3.value = (toNotNaN(+b3.value) + 1);
-b0.value = (toNotNaN(+b0.value) + 1);
-if (!compareEqual(compareGreaterThan(listGet(b2.value, b1.value), (b2.value[(b3.value | 0) - 1] ?? "")), (b4.value[(b0.value | 0) - 1] ?? ""))) {
-runtime.ext_scratch3_looks._say(("fail " + (("" + listGet(b2.value, b1.value)) + (" should be > " + ("" + (b2.value[(b3.value | 0) - 1] ?? ""))))), target);
+dataPath.set(target, null, b0, 0);
+dataPath.set(target, null, b1, 0);
+for (var a0 = toNotNaN(+dataPath.length(target, null, b2)); a0 >= 0.5; a0--) {
+dataPath.change(target, null, b1, 1);
+dataPath.set(target, null, b3, 0);
+for (var a1 = toNotNaN(+dataPath.length(target, null, b2)); a1 >= 0.5; a1--) {
+dataPath.change(target, null, b3, 1);
+dataPath.change(target, null, b0, 1);
+if (!compareEqual(compareGreaterThan(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1)), dataPath.itemOf(target, null, b2, dataPath.get(target, null, b3))), dataPath.itemOf(target, null, b4, dataPath.get(target, null, b0)))) {
+runtime.ext_scratch3_looks._say(("fail " + (toText(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1))) + (" should be > " + toText(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b3)))))), target);
 }
-b0.value = (b0.value + 1);
-if (!compareEqual(compareEqual(listGet(b2.value, b1.value), (b2.value[(b3.value | 0) - 1] ?? "")), (b4.value[(b0.value | 0) - 1] ?? ""))) {
-runtime.ext_scratch3_looks._say(("fail " + (("" + listGet(b2.value, b1.value)) + (" should be = " + ("" + (b2.value[(b3.value | 0) - 1] ?? ""))))), target);
+dataPath.change(target, null, b0, 1);
+if (!compareEqual(compareEqual(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1)), dataPath.itemOf(target, null, b2, dataPath.get(target, null, b3))), dataPath.itemOf(target, null, b4, dataPath.get(target, null, b0)))) {
+runtime.ext_scratch3_looks._say(("fail " + (toText(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1))) + (" should be = " + toText(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b3)))))), target);
 }
-b0.value = (b0.value + 1);
-if (!compareEqual(compareLessThan(listGet(b2.value, b1.value), (b2.value[(b3.value | 0) - 1] ?? "")), (b4.value[(b0.value | 0) - 1] ?? ""))) {
-runtime.ext_scratch3_looks._say(("fail " + (("" + listGet(b2.value, b1.value)) + (" should be < " + ("" + (b2.value[(b3.value | 0) - 1] ?? ""))))), target);
+dataPath.change(target, null, b0, 1);
+if (!compareEqual(compareLessThan(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1)), dataPath.itemOf(target, null, b2, dataPath.get(target, null, b3))), dataPath.itemOf(target, null, b4, dataPath.get(target, null, b0)))) {
+runtime.ext_scratch3_looks._say(("fail " + (toText(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b1))) + (" should be < " + toText(dataPath.itemOf(target, null, b2, dataPath.get(target, null, b3)))))), target);
 }
 if (isStuck()) yield;
 }
@@ -47,84 +47,46 @@ return "";
 
 // Sprite1 Wsetup values
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["n^wm8jw#b24sggt.S^tD"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"values"}]});
 return function funXYZ_setup_values () {
-b0.value = [];
-b0.value.push(0);
-b0._monitorUpToDate = false;
-b0.value.push(1);
-b0._monitorUpToDate = false;
-b0.value.push(2);
-b0._monitorUpToDate = false;
-b0.value.push(-1);
-b0._monitorUpToDate = false;
-b0.value.push(-2);
-b0._monitorUpToDate = false;
-b0.value.push("0.0");
-b0._monitorUpToDate = false;
-b0.value.push("-0.");
-b0._monitorUpToDate = false;
-b0.value.push("-0.0");
-b0._monitorUpToDate = false;
-b0.value.push(".123");
-b0._monitorUpToDate = false;
-b0.value.push("-.123");
-b0._monitorUpToDate = false;
-b0.value.push("1.");
-b0._monitorUpToDate = false;
-b0.value.push((0 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((1 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((2 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((-1 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((-2 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((0.123 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((-0.123 + 0));
-b0._monitorUpToDate = false;
-b0.value.push((1 + 0));
-b0._monitorUpToDate = false;
-b0.value.push("1e99");
-b0._monitorUpToDate = false;
-b0.value.push((1e+99 + 0));
-b0._monitorUpToDate = false;
-b0.value.push(Infinity);
-b0._monitorUpToDate = false;
-b0.value.push(-Infinity);
-b0._monitorUpToDate = false;
-b0.value.push("-infinitY");
-b0._monitorUpToDate = false;
-b0.value.push((1 / 0));
-b0._monitorUpToDate = false;
-b0.value.push((-1 / 0));
-b0._monitorUpToDate = false;
-b0.value.push((0 / 0));
-b0._monitorUpToDate = false;
-b0.value.push("NaN");
-b0._monitorUpToDate = false;
-b0.value.push("nan");
-b0._monitorUpToDate = false;
-b0.value.push("-NaN");
-b0._monitorUpToDate = false;
-b0.value.push("true");
-b0._monitorUpToDate = false;
-b0.value.push("false");
-b0._monitorUpToDate = false;
-b0.value.push(!false);
-b0._monitorUpToDate = false;
-b0.value.push(!!false);
-b0._monitorUpToDate = false;
-b0.value.push("");
-b0._monitorUpToDate = false;
-b0.value.push("Banana");
-b0._monitorUpToDate = false;
-b0.value.push(" ");
-b0._monitorUpToDate = false;
-b0.value.push("🎉");
-b0._monitorUpToDate = false;
+dataPath.clear(target, null, b0);
+dataPath.addItem(target, null, b0, 0);
+dataPath.addItem(target, null, b0, 1);
+dataPath.addItem(target, null, b0, 2);
+dataPath.addItem(target, null, b0, -1);
+dataPath.addItem(target, null, b0, -2);
+dataPath.addItem(target, null, b0, "0.0");
+dataPath.addItem(target, null, b0, "-0.");
+dataPath.addItem(target, null, b0, "-0.0");
+dataPath.addItem(target, null, b0, ".123");
+dataPath.addItem(target, null, b0, "-.123");
+dataPath.addItem(target, null, b0, "1.");
+dataPath.addItem(target, null, b0, (0 + 0));
+dataPath.addItem(target, null, b0, (1 + 0));
+dataPath.addItem(target, null, b0, (2 + 0));
+dataPath.addItem(target, null, b0, (-1 + 0));
+dataPath.addItem(target, null, b0, (-2 + 0));
+dataPath.addItem(target, null, b0, (0.123 + 0));
+dataPath.addItem(target, null, b0, (-0.123 + 0));
+dataPath.addItem(target, null, b0, (1 + 0));
+dataPath.addItem(target, null, b0, "1e99");
+dataPath.addItem(target, null, b0, (1e+99 + 0));
+dataPath.addItem(target, null, b0, Infinity);
+dataPath.addItem(target, null, b0, -Infinity);
+dataPath.addItem(target, null, b0, "-infinitY");
+dataPath.addItem(target, null, b0, (1 / 0));
+dataPath.addItem(target, null, b0, (-1 / 0));
+dataPath.addItem(target, null, b0, (0 / 0));
+dataPath.addItem(target, null, b0, "NaN");
+dataPath.addItem(target, null, b0, "nan");
+dataPath.addItem(target, null, b0, "-NaN");
+dataPath.addItem(target, null, b0, "true");
+dataPath.addItem(target, null, b0, "false");
+dataPath.addItem(target, null, b0, !false);
+dataPath.addItem(target, null, b0, !!false);
+dataPath.addItem(target, null, b0, "");
+dataPath.addItem(target, null, b0, "Banana");
+dataPath.addItem(target, null, b0, " ");
+dataPath.addItem(target, null, b0, "🎉");
 return "";
 }; })

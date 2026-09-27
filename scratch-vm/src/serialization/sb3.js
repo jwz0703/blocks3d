@@ -1214,9 +1214,9 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
     const {costumePromises} = assets;
     // Sounds from JSON
     const {soundBank, soundPromises} = assets;
-    // 3D sprites only come from .3dsb projects and sprites, see serialization/3dsb.js
-    if (object.kind === '3d' && !object.isStage) {
-        sprite.kind = '3d';
+    // 3D, camera and canvas sprites only come from .3dsb projects and sprites, see serialization/3dsb.js
+    if (['3d', 'camera', 'canvas'].includes(object.kind) && !object.isStage) {
+        sprite.kind = object.kind;
     }
     // Create the first clone, and load its run-state from JSON.
     const target = sprite.createClone(object.isStage ? StageLayering.BACKGROUND_LAYER : StageLayering.SPRITE_LAYER);

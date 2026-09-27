@@ -27,6 +27,7 @@ import timeTravelReducer, {timeTravelInitialState} from './time-travel';
 import toolboxReducer, {toolboxInitialState} from './toolbox';
 import twReducer, {twInitialState} from './tw';
 import customStageSizeReducer, {customStageSizeInitialState} from './custom-stage-size';
+import screenReducer, {screenInitialState} from './screen';
 import vmReducer, {vmInitialState} from './vm';
 import vmStatusReducer, {vmStatusInitialState} from './vm-status';
 import workspaceMetricsReducer, {workspaceMetricsInitialState} from './workspace-metrics';
@@ -44,6 +45,7 @@ const guiInitialState = {
     colorPicker: colorPickerInitialState,
     connectionModal: connectionModalInitialState,
     customStageSize: customStageSizeInitialState,
+    screen: screenInitialState,
     customProcedures: customProceduresInitialState,
     editorTab: editorTabInitialState,
     mode: modeInitialState,
@@ -150,6 +152,7 @@ const guiReducer = combineReducers({
     colorPicker: colorPickerReducer,
     connectionModal: connectionModalReducer,
     customStageSize: customStageSizeReducer,
+    screen: screenReducer,
     customProcedures: customProceduresReducer,
     editorTab: editorTabReducer,
     mode: modeReducer,

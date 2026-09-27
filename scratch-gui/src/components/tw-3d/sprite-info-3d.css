@@ -1,0 +1,181 @@
+@import "../../css/units.css";
+@import "../../css/colors.css";
+
+.sprite-info {
+    padding: 0.375rem 0.75rem;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    background-color: $ui-white;
+    color: $text-primary;
+    border-top-left-radius: $space;
+    border-top-right-radius: $space;
+    border-bottom: 1px solid $ui-black-transparent;
+    font-size: 0.75rem;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* The rotation row is inside the popover's wrapper */
+.sprite-info > * + * {
+    margin-top: 0.25rem;
+}
+
+.row-label {
+    width: 2.5rem;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+/* Flatter than the 2D panel's inputs, so the panel stays short */
+.name-input {
+    flex-grow: 1;
+    min-width: 0;
+    height: 1.5rem;
+    font-size: 0.75rem;
+}
+
+.visibility > button {
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0.125rem;
+}
+
+.axis {
+    display: flex;
+    align-items: center;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 0.25rem;
+}
+
+.axis-label {
+    font-weight: bold;
+}
+
+.axis-x { color: #e5484d; }
+.axis-y { color: #30a46c; }
+.axis-z { color: #3e63dd; }
+
+.axis input {
+    width: 100%;
+    min-width: 0;
+    height: 1.5rem;
+    padding: 0 0.25rem;
+    text-align: center;
+}
+
+.lock {
+    width: 1.5rem;
+    height: 1.5rem;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.25rem;
+    background: $ui-white;
+    color: $text-primary;
+    cursor: pointer;
+    opacity: 0.6;
+}
+
+.lock-active {
+    opacity: 1;
+    border-color: $looks-secondary;
+    background: $looks-transparent;
+    color: $looks-secondary;
+}
+
+.lock-spacer {
+    width: 1.5rem;
+    flex-shrink: 0;
+}
+
+.active-camera {
+    flex-shrink: 0;
+    padding: 0 0.5rem;
+    height: 1.5rem;
+    line-height: 1.5rem;
+    border-radius: 0.25rem;
+    background: #fff0d9;
+    color: #b35c00;
+    font-weight: bold;
+    white-space: nowrap;
+}
+
+.make-active {
+    flex-shrink: 0;
+    height: 1.5rem;
+    padding: 0 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: 0.25rem;
+    background: $ui-white;
+    color: $text-primary;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.make-active:hover {
+    border-color: $looks-secondary;
+    color: $looks-secondary;
+}
+
+.unit {
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.fov-spacer {
+    flex: 2 1 0;
+}
+
+.rotation-picker {
+    padding: 0.5rem 0.5rem 0.75rem;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 0.75rem;
+    color: $text-primary;
+}
+
+.rotation-picker > div:nth-child(2) {
+    padding: 0.75rem 1rem;
+}
+
+.rotation-axes {
+    display: flex;
+    justify-content: center;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    border: 1px solid $ui-black-transparent;
+}
+
+.rotation-axis {
+    flex: 1 1 0;
+    padding: 0.25rem 0.5rem;
+    border: none;
+    background: $ui-white;
+    color: $text-primary;
+    font: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.rotation-axis + .rotation-axis {
+    border-left: 1px solid $ui-black-transparent;
+}
+
+.rotation-axis > span {
+    font-weight: bold;
+}
+
+.rotation-axis-selected {
+    background: $looks-transparent;
+}
+
+.rotation-view {
+    text-align: center;
+    opacity: 0.7;
+}

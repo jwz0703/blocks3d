@@ -4,6 +4,7 @@ export default {
     SPRITE: 'SPRITE',
     CODE: 'CODE',
     FILE: 'FILE',
+    MODEL: 'MODEL',
 
     BACKPACK_SOUND: 'BACKPACK_SOUND',
     BACKPACK_COSTUME: 'BACKPACK_COSTUME',

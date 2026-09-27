@@ -20,6 +20,7 @@ import {getEventXY} from '../lib/touch-utils';
 import StageSelectorComponent from '../components/stage-selector/stage-selector.jsx';
 
 import {getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
+import getEnvironmentPreview from '../lib/tw-environment-preview';
 import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
 import {placeInViewport} from '../lib/backpack/code-payload.js';
 
@@ -188,6 +189,7 @@ class StageSelector extends React.Component {
 }
 StageSelector.propTypes = {
     ...StageSelectorComponent.propTypes,
+    environment: PropTypes.object, // eslint-disable-line react/forbid-prop-types
     id: PropTypes.string,
     intl: intlShape.isRequired,
     isRtl: PropTypes.bool,
@@ -199,9 +201,10 @@ StageSelector.propTypes = {
     })
 };
 
-const mapStateToProps = (state, {asset, id}) => ({
+const mapStateToProps = (state, {asset, environment, id}) => ({
     isRtl: state.locales.isRtl,
-    url: asset && asset.encodeDataURI(),
+    // A backdrop with a 3D sky shows the sky; its own picture is blank
+    url: (environment && getEnvironmentPreview(environment, state.scratchGui.vm)) || (asset && asset.encodeDataURI()),
     vm: state.scratchGui.vm,
     receivedBlocks: state.scratchGui.hoveredTarget.receivedBlocks &&
             state.scratchGui.hoveredTarget.sprite === id,

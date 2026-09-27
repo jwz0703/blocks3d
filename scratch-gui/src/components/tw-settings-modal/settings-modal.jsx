@@ -128,42 +128,31 @@ BooleanSetting.propTypes = {
     label: PropTypes.node.isRequired
 };
 
+/* eslint-disable react/jsx-no-literals */
+// my-turbowarp: projects run at 60 FPS; 30 saves battery on phones. Saved with the project.
 const CustomFPS = props => (
     <BooleanSetting
-        value={props.framerate !== 30}
+        value={props.framerate === 30}
         onChange={props.onChange}
-        label={
-            <FormattedMessage
-                defaultMessage="60 FPS (Custom FPS)"
-                description="FPS setting"
-                id="tw.settingsModal.fps"
-            />
-        }
+        label="30 FPS（省電）"
         help={
-            <FormattedMessage
-                // eslint-disable-next-line max-len
-                defaultMessage="Runs scripts 60 times per second instead of 30. Most projects will not work properly with this enabled. You should try Interpolation with 60 FPS mode disabled if that is the case. {customFramerate}."
-                description="FPS setting help"
-                id="tw.settingsModal.fpsHelp"
-                values={{
-                    customFramerate: (
-                        <a
-                            onClick={props.onCustomizeFramerate}
-                            tabIndex="0"
-                        >
-                            <FormattedMessage
-                                defaultMessage="Click to use a framerate other than 30 or 60"
-                                description="FPS settings help"
-                                id="tw.settingsModal.fpsHelp.customFramerate"
-                            />
-                        </a>
-                    )
-                }}
-            />
+            <span>
+                {`目前每秒 ${props.framerate || '螢幕更新率'} 幀，預設是 60。改成 30 可以在手機上省電，但畫面比較不流暢。` +
+                    '幀率跟著專案存檔。「當每幀」的 dt、物理、動畫和相機跟隨都依時間計算，換幀率速度不變；' +
+                    '「重複執行：移動 10 步」這類每幀移動固定距離的寫法，幀率越低就越慢。'}
+                <a
+                    onClick={props.onCustomizeFramerate}
+                    tabIndex="0"
+                >
+                    設定其他幀率
+                </a>
+                。
+            </span>
         }
         slug="custom-fps"
     />
 );
+/* eslint-enable react/jsx-no-literals */
 CustomFPS.propTypes = {
     framerate: PropTypes.number,
     onChange: PropTypes.func,
@@ -239,74 +228,184 @@ const DisableCompiler = props => (
     />
 );
 
-const CustomStageSize = ({
-    customStageSizeEnabled,
-    stageWidth,
-    onStageWidthChange,
-    stageHeight,
-    onStageHeightChange
-}) => (
-    <Setting
-        active={customStageSizeEnabled}
-        primary={(
-            <div className={classNames(styles.label, styles.customStageSize)}>
-                <FormattedMessage
-                    defaultMessage="Custom Stage Size:"
-                    description="Custom Stage Size option"
-                    id="tw.settingsModal.customStageSize"
+/* eslint-disable react/jsx-no-literals */
+const SCREEN_MODES = [
+    {value: 'height', label: '固定高度（寬度跟著螢幕）'},
+    {value: 'width', label: '固定寬度（高度跟著螢幕，直式遊戲）'},
+    {value: 'expand', label: '延伸（參考大小一定完整看得到）'},
+    {value: 'fixed', label: '固定（補黑邊）'}
+];
+const RENDER_SCALES = [1, 0.75, 0.5, 0.25];
+const SHADOW_QUALITIES = [
+    {value: 'high', label: '高'},
+    {value: 'low', label: '低'},
+    {value: 'off', label: '關閉'}
+];
+
+// How the stage fits the screen (scratch-vm engine/screen.js, ROADMAP.md 7.5)
+class ScreenSettings extends React.Component {
+    constructor (props) {
+        super(props);
+        bindAll(this, [
+            'handleModeChange',
+            'handleWidthChange',
+            'handleHeightChange',
+            'handleRenderScaleChange',
+            'handleShadowsChange'
+        ]);
+    }
+    handleModeChange (e) {
+        this.props.onScreenSettingsChange({mode: e.target.value});
+    }
+    handleWidthChange (value) {
+        this.props.onScreenSettingsChange({width: value});
+    }
+    handleHeightChange (value) {
+        this.props.onScreenSettingsChange({height: value});
+    }
+    handleRenderScaleChange (e) {
+        this.props.onScreenSettingsChange({renderScale: Number(e.target.value)});
+    }
+    handleShadowsChange (e) {
+        this.props.onScreenSettingsChange({shadows: e.target.value});
+    }
+    render () {
+        const screenSettings = this.props.screenSettings;
+        return (
+            <React.Fragment>
+                <Setting
+                    active={screenSettings.mode !== 'fixed'}
+                    primary={(
+                        <div className={classNames(styles.label, styles.customStageSize)}>
+                            <span>畫面模式：</span>
+                            <select
+                                className={styles.select}
+                                value={screenSettings.mode}
+                                onChange={this.handleModeChange}
+                            >
+                                {SCREEN_MODES.map(mode => (
+                                    <option
+                                        key={mode.value}
+                                        value={mode.value}
+                                    >
+                                        {mode.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    help={(
+                        <span>
+                            播放器會填滿整個視窗。「固定高度」時舞台的 y 永遠是參考高度的一半到負一半，x 的範圍跟著螢幕的長寬比變，
+                            用「螢幕 [寬度]」和「當螢幕大小改變」排 HUD。3D 相機的垂直視野不變，寬螢幕看到更多左右兩側。
+                            編輯器用舞台上方的選單預覽不同的螢幕比例。
+                        </span>
+                    )}
                 />
-                <BufferedInput
-                    value={stageWidth}
-                    onSubmit={onStageWidthChange}
-                    className={styles.customStageSizeInput}
-                    type="number"
-                    min="0"
-                    max="1024"
-                    step="1"
+                <Setting
+                    active={screenSettings.width !== 480 || screenSettings.height !== 360}
+                    primary={(
+                        <div className={classNames(styles.label, styles.customStageSize)}>
+                            <span>參考大小：</span>
+                            <BufferedInput
+                                value={screenSettings.width}
+                                onSubmit={this.handleWidthChange}
+                                className={styles.customStageSizeInput}
+                                type="number"
+                                min="1"
+                                max="4096"
+                                step="1"
+                            />
+                            <span>{'×'}</span>
+                            <BufferedInput
+                                value={screenSettings.height}
+                                onSubmit={this.handleHeightChange}
+                                className={styles.customStageSizeInput}
+                                type="number"
+                                min="1"
+                                max="4096"
+                                step="1"
+                            />
+                        </div>
+                    )}
+                    help={(
+                        <span>
+                            舞台的單位，不是像素：畫面永遠依螢幕的實際解析度繪製。新專案是 1280×720，大小 100% 的點陣造型在
+                            720p 螢幕上是 1:1。對話框和監看器依這個大小等比例放大（480×360 是 1 倍）。
+                        </span>
+                    )}
                 />
-                <span>{'×'}</span>
-                <BufferedInput
-                    value={stageHeight}
-                    onSubmit={onStageHeightChange}
-                    className={styles.customStageSizeInput}
-                    type="number"
-                    min="0"
-                    max="1024"
-                    step="1"
+                <Setting
+                    active={screenSettings.renderScale !== 1}
+                    primary={(
+                        <div className={classNames(styles.label, styles.customStageSize)}>
+                            <span>渲染比例：</span>
+                            <select
+                                className={styles.select}
+                                value={screenSettings.renderScale}
+                                onChange={this.handleRenderScaleChange}
+                            >
+                                {RENDER_SCALES.map(scale => (
+                                    <option
+                                        key={scale}
+                                        value={scale}
+                                    >
+                                        {`${Math.round(scale * 100)}%`}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    help={(
+                        <span>
+                            畫面的解析度跟螢幕相比。降低可以換效能（例如手機），畫面會比較模糊。
+                        </span>
+                    )}
                 />
-            </div>
-        )}
-        secondary={
-            (stageWidth >= 1000 || stageHeight >= 1000) && (
-                <div className={styles.warning}>
-                    <FormattedMessage
-                        // eslint-disable-next-line max-len
-                        defaultMessage="Using a custom stage size this large is not recommended! Instead, use a lower size with the same aspect ratio and let fullscreen mode upscale it to match the user's display."
-                        description="Warning about using stages that are too large in settings modal"
-                        id="tw.settingsModal.largeStageWarning"
-                    />
-                    <LearnMore slug="custom-stage-size" />
-                </div>
-            )
-        }
-        help={(
-            <FormattedMessage
-                // eslint-disable-next-line max-len
-                defaultMessage="Changes the size of the Scratch stage from 480x360 to something else. Try 640x360 to make the stage widescreen. Very few projects will handle this properly."
-                description="Custom Stage Size option"
-                id="tw.settingsModal.customStageSizeHelp"
-            />
-        )}
-        slug="custom-stage-size"
-    />
-);
-CustomStageSize.propTypes = {
-    customStageSizeEnabled: PropTypes.bool,
-    stageWidth: PropTypes.number,
-    onStageWidthChange: PropTypes.func,
-    stageHeight: PropTypes.number,
-    onStageHeightChange: PropTypes.func
+                <Setting
+                    active={screenSettings.shadows !== 'high'}
+                    primary={(
+                        <div className={classNames(styles.label, styles.customStageSize)}>
+                            <span>陰影：</span>
+                            <select
+                                className={styles.select}
+                                value={screenSettings.shadows}
+                                onChange={this.handleShadowsChange}
+                            >
+                                {SHADOW_QUALITIES.map(quality => (
+                                    <option
+                                        key={quality.value}
+                                        value={quality.value}
+                                    >
+                                        {quality.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    help={(
+                        <span>
+                            3D 場景裡太陽光的陰影。「低」用比較小的陰影貼圖，「關閉」完全不畫陰影，手機上可以換效能。
+                            環境裡的「陰影」關掉時，這裡設什麼都沒有陰影。
+                        </span>
+                    )}
+                />
+            </React.Fragment>
+        );
+    }
+}
+
+ScreenSettings.propTypes = {
+    screenSettings: PropTypes.shape({
+        mode: PropTypes.string,
+        width: PropTypes.number,
+        height: PropTypes.number,
+        renderScale: PropTypes.number,
+        shadows: PropTypes.string
+    }),
+    onScreenSettingsChange: PropTypes.func
 };
+/* eslint-enable react/jsx-no-literals */
 
 const StoreProjectOptions = ({onStoreProjectOptions}) => (
     <div className={styles.setting}>
@@ -377,6 +476,16 @@ const SettingsModalComponent = props => (
                 value={props.warpTimer}
                 onChange={props.onWarpTimerChange}
             />
+            {!props.isEmbedded && (
+                <React.Fragment>
+                    <Header>
+                        {'畫面'}
+                    </Header>
+                    <ScreenSettings
+                        {...props}
+                    />
+                </React.Fragment>
+            )}
             <Header>
                 <FormattedMessage
                     defaultMessage="Danger Zone"
@@ -384,11 +493,6 @@ const SettingsModalComponent = props => (
                     id="tw.settingsModal.dangerZone"
                 />
             </Header>
-            {!props.isEmbedded && (
-                <CustomStageSize
-                    {...props}
-                />
-            )}
             <DisableCompiler
                 value={props.disableCompiler}
                 onChange={props.onDisableCompilerChange}

@@ -3,12 +3,12 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["KMKx1gRubgLz,!L]^TBS"];
-const b1 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"list"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
 thread.procedures["Wtest"]();
-if ((("" + listGet(b0.value, b1.value)).toLowerCase() === "thing".toLowerCase())) {
+if ((toText(dataPath.itemOf(target, null, b0, dataPath.get(target, null, b1))).toLowerCase() === "thing".toLowerCase())) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -17,13 +17,13 @@ retire(); return;
 
 // Sprite1 Wtest
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["yz}9Y:gLL0ZWEs}l)s+Q"];
-const b1 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"always true"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function funXYZ_test () {
-if ((("" + b0.value).toLowerCase() === "true".toLowerCase())) {
-b1.value = "last";
+if ((toText(dataPath.get(target, null, b0)).toLowerCase() === "true".toLowerCase())) {
+dataPath.set(target, null, b1, "last");
 return "";
 }
-b1.value = (1 + 2);
+dataPath.set(target, null, b1, (1 + 2));
 return "";
 }; })

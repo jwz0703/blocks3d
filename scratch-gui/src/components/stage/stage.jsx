@@ -8,6 +8,7 @@ import Loupe from '../loupe/loupe.jsx';
 import MonitorList from '../../containers/monitor-list.jsx';
 import TargetHighlight from '../../containers/target-highlight.jsx';
 import GreenFlagOverlay from '../../containers/green-flag-overlay.jsx';
+import Stage3DToolbar from '../../containers/tw-stage-3d-toolbar.jsx';
 import Question from '../../containers/question.jsx';
 import MicIndicator from '../mic-indicator/mic-indicator.jsx';
 import {STAGE_DISPLAY_SIZES} from '../../lib/layout-constants.js';
@@ -89,6 +90,7 @@ const StageComponent = props => {
                             stageWidth={stageDimensions.width}
                         />
                     </Box>
+                    {useEditorDragStyle ? <Stage3DToolbar overlay /> : null}
                     {isColorPicking && colorInfo ? (
                         <Loupe colorInfo={colorInfo} />
                     ) : null}

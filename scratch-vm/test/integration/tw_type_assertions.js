@@ -8,6 +8,7 @@ const {IRGenerator} = require('../../src/compiler/irgen');
 const {IROptimizer} = require('../../src/compiler/iroptimizer');
 const {StackOpcode, InputType, InputOpcode} = require('../../src/compiler/enums');
 const {IntermediateStack} = require('../../src/compiler/intermediate');
+const dataUpgrade = require('../../src/serialization/tw-data-upgrade');
 
 const fixture = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'tw-type-assertions.sb3'));
 
@@ -74,7 +75,15 @@ test('type assertions', async t => {
         t.fail('Compile error');
     });
 
-    await vm.loadProject(fixture);
+    // The optimizer's variable types are tested on Scratch's variable blocks, which loading turns into path blocks
+    // (ROADMAP.md 4.12): load the fixture as it is
+    const upgradeTargets = dataUpgrade.upgradeTargets;
+    dataUpgrade.upgradeTargets = () => {};
+    try {
+        await vm.loadProject(fixture);
+    } finally {
+        dataUpgrade.upgradeTargets = upgradeTargets; // eslint-disable-line require-atomic-updates
+    }
 
     const thread = vm.runtime.startHats('event_whenflagclicked')[0];
 

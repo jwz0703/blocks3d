@@ -5,7 +5,11 @@ import {defineMessages, intlShape, injectIntl} from 'react-intl';
 import VM from 'scratch-vm';
 
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
+import EnvironmentPanel, {SKY_TYPES} from '../components/tw-3d/environment-panel.jsx';
 import PaintEditorWrapper from './paint-editor-wrapper.jsx';
+import getEnvironmentPreview from '../lib/tw-environment-preview';
+import getCostumeUrl from '../lib/get-costume-url';
+import log from '../lib/log';
 import {connect} from 'react-redux';
 import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
 import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
@@ -33,8 +37,11 @@ import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
 import paintIcon from '../components/action-menu/icon--paint.svg';
 import surpriseIcon from '../components/action-menu/icon--surprise.svg';
 import searchIcon from '../components/action-menu/icon--search.svg';
+import skyIcon from '../components/action-menu/icon--sky.svg';
 
 import {getCostumeLibrary, getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
+
+import styles from '../components/tw-3d/environment-panel.css';
 
 let messages = defineMessages({
     addLibraryBackdropMsg: {
@@ -86,6 +93,11 @@ class CostumeTab extends React.Component {
             'handleFileUploadClick',
             'handleCostumeUpload',
             'handleDrop',
+            'handleChangeEnvironment',
+            'handleFilesChanged',
+            'handleNewEnvironment',
+            'handleRenameBackdrop',
+            'handleUploadSkyFile',
             'setFileInput'
         ]);
         const {
@@ -99,6 +111,11 @@ class CostumeTab extends React.Component {
         } else {
             this.state = {selectedCostumeIndex: 0};
         }
+        this.state.fileVersion = 0;
+    }
+    componentDidMount () {
+        // Skies can be files in the Files tab
+        this.props.vm.runtime.fileManager.on('change', this.handleFilesChanged);
     }
     componentWillReceiveProps (nextProps) {
         const {
@@ -127,6 +144,35 @@ class CostumeTab extends React.Component {
             // If switching editing targets, update the costume index
             this.setState({selectedCostumeIndex: target.currentCostume});
         }
+    }
+    componentWillUnmount () {
+        this.props.vm.runtime.fileManager.removeListener('change', this.handleFilesChanged);
+    }
+    handleFilesChanged () {
+        this.setState(state => ({fileVersion: state.fileVersion + 1}));
+    }
+    handleChangeEnvironment (changes) {
+        this.props.vm.setEnvironment3D(changes, this.state.selectedCostumeIndex);
+    }
+    handleRenameBackdrop (name) {
+        this.props.vm.renameCostume(this.state.selectedCostumeIndex, name);
+    }
+    async handleUploadSkyFile (file, section) {
+        try {
+            const savedName = this.props.vm.runtime.fileManager.addFile(file.name, await file.arrayBuffer());
+            this.handleChangeEnvironment(section === 'lighting' ?
+                {lighting: {type: 'hdri', file: savedName}} :
+                {sky: {type: 'hdri', file: savedName}});
+        } catch (err) {
+            log.error(err);
+            alert(`無法讀取檔案：${err}`); // eslint-disable-line no-alert
+        }
+    }
+    handleNewEnvironment () {
+        // A backdrop whose picture is blank, since its sky covers it
+        const costume = emptyCostume('環境');
+        costume.environment = this.props.vm.getDefaultEnvironment3D();
+        this.handleNewCostume(costume);
     }
     handleSelectCostume (costumeIndex) {
         this.props.vm.editingTarget.setCostume(costumeIndex);
@@ -267,15 +313,41 @@ class CostumeTab extends React.Component {
         const addLibraryFunc = isStage ? onNewLibraryBackdropClick : onNewLibraryCostumeClick;
         const addLibraryIcon = isStage ? addLibraryBackdropIcon : addLibraryCostumeIcon;
 
-        const costumeData = target.costumes ? target.costumes.map(costume => ({
-            name: costume.name,
-            asset: costume.asset,
-            details: costume.size ? this.formatCostumeDetails(costume.size, costume.bitmapResolution) : null,
-            dragPayload: costume
-        })) : [];
+        const costumeData = target.costumes ? target.costumes.map(costume => {
+            const item = {
+                name: costume.name,
+                asset: costume.asset,
+                details: costume.size ? this.formatCostumeDetails(costume.size, costume.bitmapResolution) : null,
+                dragPayload: costume
+            };
+            // Backdrops are environments: the ones with a 3D sky show it instead of their (blank) picture. Stage items
+            // always have a url, since the folders addon keeps the old one when an item has none.
+            if (isStage && costume.environment && costume.environment.sky.type !== '2d') {
+                const skyType = SKY_TYPES.find(type => type.value === costume.environment.sky.type);
+                item.url = getEnvironmentPreview(costume.environment, vm) || '';
+                item.details = skyType ? skyType.name : null;
+            } else if (isStage && costume.asset) {
+                item.url = getCostumeUrl(costume.asset);
+            }
+            return item;
+        }) : [];
+        const selectedIndex = this.state.selectedCostumeIndex;
+        const environment = isStage && target.costumes && target.costumes[selectedIndex] ?
+            vm.getEnvironment3D(selectedIndex) :
+            null;
+        const paintEditor = target.costumes ? (
+            <PaintEditorWrapper
+                selectedCostumeIndex={this.state.selectedCostumeIndex}
+            />
+        ) : null;
         return (
             <AssetPanel
                 buttons={[
+                    ...(isStage ? [{
+                        title: '新增環境',
+                        img: skyIcon,
+                        onClick: this.handleNewEnvironment
+                    }] : []),
                     {
                         title: intl.formatMessage(addLibraryMessage),
                         img: addLibraryIcon,
@@ -317,12 +389,19 @@ class CostumeTab extends React.Component {
                 onExportClick={this.handleExportCostume}
                 onItemClick={this.handleSelectCostume}
             >
-                {target.costumes ?
-                    <PaintEditorWrapper
-                        selectedCostumeIndex={this.state.selectedCostumeIndex}
-                    /> :
-                    null
-                }
+                {environment ? (
+                    <div className={styles.environment}>
+                        <EnvironmentPanel
+                            environment={environment}
+                            fileNames={vm.runtime.fileManager.getFileNames()}
+                            name={target.costumes[selectedIndex].name}
+                            onChange={this.handleChangeEnvironment}
+                            onRename={this.handleRenameBackdrop}
+                            onUploadSkyFile={this.handleUploadSkyFile}
+                        />
+                        {environment.sky.type === '2d' ? paintEditor : null}
+                    </div>
+                ) : paintEditor}
             </AssetPanel>
         );
     }

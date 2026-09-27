@@ -3,16 +3,16 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["JbF5exWEi*m?-UEmkASS"];
-const b1 = stage.variables["[G/@.KGc-4y[(GZ(bt7o"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"New Pitch"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"Old Pitch"}]});
 const b2 = runtime.getOpcodeFunction("sound_seteffectto");
 return function* genXYZ () {
 while (true) {
-if (compareEqual(b0.value, b1.value)) {
+if (compareEqual(dataPath.get(target, null, b0), dataPath.get(target, null, b1))) {
 } else {
 runtime.ext_scratch3_looks._say("pass", target);
-b1.value = b0.value;
-yield* executeInCompatibilityLayer({"VALUE":b0.value,"EFFECT":"pitch",}, b2, false, true, "*=8r,g4Pzvxo?aSMcpfX", null);
+dataPath.set(target, null, b1, dataPath.get(target, null, b0));
+yield* executeInCompatibilityLayer({"VALUE":dataPath.get(target, null, b0),"EFFECT":"pitch",}, b2, false, true, "*=8r,g4Pzvxo?aSMcpfX", null);
 if (hasResumedFromPromise) {hasResumedFromPromise = false;continue;}
 }
 yield;
@@ -22,16 +22,16 @@ retire(); return;
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["[G/@.KGc-4y[(GZ(bt7o"];
-const b1 = stage.variables["JbF5exWEi*m?-UEmkASS"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"Old Pitch"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"New Pitch"}]});
 return function* genXYZ () {
-b0.value = 0;
+dataPath.set(target, null, b0, 0);
 runtime.ext_scratch3_looks._say("plan 15", target);
 for (var a0 = 15; a0 > 0; a0--) {
-if ((toNotNaN(+b1.value) === 200)) {
-b1.value = 50;
+if ((toNotNaN(+dataPath.get(target, null, b1)) === 200)) {
+dataPath.set(target, null, b1, 50);
 } else {
-b1.value = 200;
+dataPath.set(target, null, b1, 200);
 }
 thread.timer = timer();
 var a1 = Math.max(0, 1000 * 0);

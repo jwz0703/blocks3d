@@ -83,7 +83,6 @@ app.appendChild(stageElement);
 
 const vm = new VM();
 window.vm = vm;
-vm.setCompatibilityMode(true);
 vm.attachStorage(new ScratchStorage());
 vm.attachV2BitmapAdapter(new V2BitmapAdapter());
 vm.setVideoProvider(new VideoProvider());
@@ -101,9 +100,11 @@ try {
     console.error('Could not create scratch-audio', e);
 }
 
-// Stage fills the window while keeping the project's aspect ratio
+// The stage fills the window: a stage that follows the shape of the screen (scratch-vm engine/screen.js) takes the
+// window's shape, a fixed one keeps its own and gets black bars
 let rect = canvas.getBoundingClientRect();
 const layout = () => {
+    vm.runtime.setViewportAspect(window.innerWidth / Math.max(1, window.innerHeight));
     const stageWidth = vm.runtime.stageWidth;
     const stageHeight = vm.runtime.stageHeight;
     const scale = Math.min(window.innerWidth / stageWidth, window.innerHeight / stageHeight);

@@ -7,6 +7,8 @@ const jsexecute = require('./jsexecute');
 const environment = require('./environment');
 const {StackOpcode, InputOpcode, InputType} = require('./enums.js');
 const oldCompilerCompatibility = require('./old-compiler-compatibility.js');
+const DataPath = require('../util/data-path');
+const PathBlocks = require('../extensions/tw_data/path-blocks');
 
 // These imports are used by jsdoc comments but eslint doesn't know that
 /* eslint-disable no-unused-vars */
@@ -124,7 +126,7 @@ class JSGenerator {
          */
         this.forRangeVariables = {};
         /**
-         * Whether the script uses local variables (twlocalvars). Each call of the generated function gets its own Map.
+         * Whether the script uses local variables (local. paths of the 資料 blocks). Each call of the generated function gets its own Map.
          * @type {boolean}
          */
         this.usesLocals = false;
@@ -203,7 +205,12 @@ class JSGenerator {
         case InputOpcode.CAST_NUMBER_INDEX:
             return `(${this.descendInput(node.target.toType(InputType.NUMBER_OR_NAN))} | 0)`;
         case InputOpcode.CAST_STRING:
-            return `("" + ${this.descendInput(node.target)})`;
+            if (node.target.isAlwaysType(InputType.NUMBER_OR_NAN) || node.target.isAlwaysType(InputType.BOOLEAN) ||
+                node.target.isAlwaysType(InputType.STRING)) {
+                return `("" + ${this.descendInput(node.target)})`;
+            }
+            // Might be an object or array (see util/data-path.js): those are shown as JSON
+            return `toText(${this.descendInput(node.target)})`;
         case InputOpcode.CAST_COLOR:
             return `colorToList(${this.descendInput(node.target)})`;
 
@@ -281,6 +288,8 @@ class JSGenerator {
             return 'limitPrecision(target.x)';
         case InputOpcode.MOTION_Y_GET:
             return 'limitPrecision(target.y)';
+        case InputOpcode.MOTION3D_FIELD_GET:
+            return node.raw ? `target.${node.field}` : `limitPrecision3D(target.${node.field})`;
 
         case InputOpcode.SENSING_MOUSE_DOWN:
             return 'runtime.ioDevices.mouse.getIsDown()';
@@ -408,6 +417,9 @@ class JSGenerator {
         case InputOpcode.OP_POW_10:
             return `(10 ** ${this.descendInput(node.value)})`;
 
+        case InputOpcode.PROCEDURE_CALL_SPRITE:
+            return `(yield* callSprites(${this.descendCrossCall(node)}))`;
+
         case InputOpcode.PROCEDURE_CALL: {
             const procedureCode = node.code;
             const procedureVariant = node.variant;
@@ -511,12 +523,23 @@ class JSGenerator {
         case InputOpcode.CONTROL_FOR_RANGE_INDEX:
             return this.forRangeVariables[node.loop] || '0';
 
-        case InputOpcode.LOCAL_GET:
-            this.usesLocals = true;
-            return `localGet(localVars, ${this.descendInput(node.name)})`;
-        case InputOpcode.LOCAL_EXISTS:
-            this.usesLocals = true;
-            return `localVars.has(${this.descendInput(node.name)})`;
+        case InputOpcode.CONTROL_CLONE_ID:
+            return '(target.cloneId === undefined ? 0 : target.cloneId)';
+
+        case InputOpcode.DATA_OP:
+            return this.descendDataOp(node);
+        case InputOpcode.DATA_SCOPE:
+            if (node.scope === 'local') this.usesLocals = true;
+            return `new dataPath.ScopeRef("${node.scope}", target, ${node.scope === 'local' ? 'localVars' : 'null'})`;
+        case InputOpcode.DATA_TEMPLATE: {
+            const parts = node.parts.map(part => {
+                if (typeof part === 'string') return `"${sanitize(part)}"`;
+                if (part.scope === 'local') this.usesLocals = true;
+                const locals = part.scope === 'local' ? 'localVars' : 'null';
+                return `toText(dataPath.get(target, ${locals}, ${this.dataPathConstant(part)}))`;
+            });
+            return `(${parts.join(' + ')})`;
+        }
 
         case InputOpcode.TW_KEY_LAST_PRESSED:
             return 'runtime.ioDevices.keyboard.getLastKeyPressed()';
@@ -605,7 +628,7 @@ class JSGenerator {
             break;
 
         case StackOpcode.CONTROL_CLONE_CREATE:
-            this.source += `runtime.ext_scratch3_control._createClone(${this.descendInput(node.target)}, target);\n`;
+            this.source += `runtime.ext_scratch3_control._createClone(${this.descendInput(node.target)}, target, ${this.descendInput(node.id)});\n`;
             break;
         case StackOpcode.CONTROL_CLONE_DELETE:
             this.source += 'if (!target.isOriginal) {\n';
@@ -877,11 +900,51 @@ class JSGenerator {
             this.source += `runtime.ext_scratch3_motion._moveSteps(${this.descendInput(node.steps)}, target);\n`;
             break;
 
+        // 3D sprites and camera sprites: their own methods, which check for invalid numbers themselves. Every change
+        // in a frame is drawn once (see Scene3D.markTransformDirty).
+        case StackOpcode.MOTION3D_XYZ_SET: {
+            const x = 'x' in node ? this.descendInput(node.x) : 'target.x';
+            const y = 'y' in node ? this.descendInput(node.y) : 'target.y';
+            const z = 'z' in node ? this.descendInput(node.z) : 'target.z';
+            this.source += `target.setXYZ(${x}, ${y}, ${z});\n`;
+            break;
+        }
+        case StackOpcode.MOTION3D_ROTATION_SET: {
+            const x = 'x' in node ? this.descendInput(node.x) : 'target.rotationX';
+            const y = 'y' in node ? this.descendInput(node.y) : 'target.rotationY';
+            const z = 'z' in node ? this.descendInput(node.z) : 'target.rotationZ';
+            this.source += `target.setRotation(${x}, ${y}, ${z});\n`;
+            break;
+        }
+        case StackOpcode.MOTION3D_MOVE_FORWARD:
+            this.source += `target.moveForward(${this.descendInput(node.steps)});\n`;
+            break;
+        case StackOpcode.MOTION3D_MOVE_LEVEL:
+            this.source += `target.moveLevel(${this.descendInput(node.direction)}, ${this.descendInput(node.steps)});\n`;
+            break;
+        case StackOpcode.MOTION3D_LOOK_AT:
+            this.source += `target.lookAt(${this.descendInput(node.x)}, ${this.descendInput(node.y)}, ` +
+                `${this.descendInput(node.z)});\n`;
+            break;
+        case StackOpcode.LOOKS3D_SCALE_SET:
+            if ('scale' in node) {
+                const scale = this.localVariables.next();
+                this.source += `var ${scale} = ${this.descendInput(node.scale)};\n`;
+                this.source += `target.setScale(${scale}, ${scale}, ${scale});\n`;
+            } else {
+                this.source += `target.setScale(${this.descendInput(node.x)}, ${this.descendInput(node.y)}, ` +
+                    `${this.descendInput(node.z)});\n`;
+            }
+            break;
+        case StackOpcode.CAMERA3D_FOV_SET:
+            this.source += `target.setFov(${this.descendInput(node.fov)});\n`;
+            break;
+
         case StackOpcode.NOP:
             break;
 
         case StackOpcode.PEN_CLEAR:
-            this.source += `${PEN_EXT}.clear();\n`;
+            this.source += `${PEN_EXT}._clear(target);\n`;
             break;
         case StackOpcode.PEN_DOWN:
             this.source += `${PEN_EXT}._penDown(target);\n`;
@@ -920,6 +983,9 @@ class JSGenerator {
             this.source += `${PEN_EXT}._penUp(target);\n`;
             break;
 
+        case StackOpcode.PROCEDURE_CALL_SPRITE:
+            this.source += `yield* callSprites(${this.descendCrossCall(node)});\n`;
+            break;
         case StackOpcode.PROCEDURE_CALL: {
             const procedureCode = node.code;
             const procedureVariant = node.variant;
@@ -952,17 +1018,9 @@ class JSGenerator {
             this.stopScriptAndReturn(this.descendInput(node.value));
             break;
 
-        case StackOpcode.LOCAL_SET:
-            this.usesLocals = true;
-            this.source += `localVars.set(${this.descendInput(node.name)}, ${this.descendInput(node.value)});\n`;
+        case StackOpcode.DATA_OP:
+            this.source += `${this.descendDataOp(node)};\n`;
             break;
-        case StackOpcode.LOCAL_CHANGE: {
-            this.usesLocals = true;
-            const key = this.localVariables.next();
-            this.source += `const ${key} = ${this.descendInput(node.name)};\n`;
-            this.source += `localVars.set(${key}, toNotNaN(+localGet(localVars, ${key})) + ${this.descendInput(node.value)});\n`;
-            break;
-        }
 
         case StackOpcode.SENSING_TIMER_RESET:
             this.source += 'runtime.ioDevices.clock.resetProjectTimer();\n';
@@ -1074,6 +1132,47 @@ class JSGenerator {
      * @param {string} source
      * @returns {string}
      */
+    /**
+     * @param {object} parsed a path parsed by DataPath.parse
+     * @returns {string} JS for the parsed path, parsed once when the script is set up
+     */
+    dataPathConstant (parsed) {
+        return this.evaluateOnce(`dataPath.makePath(${JSON.stringify({scope: parsed.scope, steps: parsed.steps})})`);
+    }
+
+    /**
+     * @param {object} node a DATA_OP node: a block that works with a path (see extensions/tw_data/path-blocks.js)
+     * @returns {string} JS that calls the function of DataPath for it
+     */
+    descendDataOp (node) {
+        const info = PathBlocks.PATH_BLOCKS[node.op];
+        const pathInput = node[info.args[0]];
+        let pathJS;
+        let usesLocals = true;
+        if (pathInput.opcode === InputOpcode.CONSTANT) {
+            const parsed = DataPath.parse(pathInput.inputs.value, info.scope);
+            if (parsed) {
+                pathJS = this.dataPathConstant(parsed);
+                usesLocals = parsed.scope === 'local';
+            } else {
+                // Not a path: a value (e.g. the length of a text), or nothing
+                pathJS = info.pathOrValue ? this.descendInput(pathInput) : 'null';
+                usesLocals = false;
+            }
+        } else if (info.pathOrValue) {
+            // Text is a path, arrays and objects are values: see DataPath.resolve
+            pathJS = this.descendInput(pathInput);
+        } else {
+            pathJS = `dataPath.parse(${this.descendInput(pathInput)}, "${info.scope}")`;
+        }
+        if (usesLocals) this.usesLocals = true;
+        const args = [pathJS];
+        for (let i = 1; i < info.args.length; i++) {
+            args.push(this.descendInput(node[info.args[i]]));
+        }
+        return `dataPath.${info.fn}(target, ${usesLocals ? 'localVars' : 'null'}, ${args.join(', ')})`;
+    }
+
     evaluateOnce (source) {
         if (Object.prototype.hasOwnProperty.call(this._setupVariables, source)) {
             return this._setupVariables[source];
@@ -1081,6 +1180,22 @@ class JSGenerator {
         const variable = this._setupVariablesPool.next();
         this._setupVariables[source] = variable;
         return variable;
+    }
+
+    /**
+     * @param {object} node a PROCEDURE_CALL_SPRITE node
+     * @returns {string} JS of the arguments of callSprites (see jsexecute.js)
+     */
+    descendCrossCall (node) {
+        const id = node.id ? this.descendInput(node.id) : '""';
+        const targets = `runtime.crossCall.resolveTargets("${sanitize(node.mode)}", "${sanitize(node.sprite)}", ` +
+            `${id}, target)`;
+        const args = Object.keys(node.args)
+            .map(argumentId => `"${sanitize(argumentId)}": ${this.descendInput(node.args[argumentId])}`)
+            .join(', ');
+        const prototypeId = node.prototypeId === null ? 'null' : `"${sanitize(node.prototypeId)}"`;
+        const proccode = node.proccode === null ? 'null' : `"${sanitize(node.proccode)}"`;
+        return `${targets}, ${prototypeId}, ${proccode}, {${args}}`;
     }
 
     retire () {

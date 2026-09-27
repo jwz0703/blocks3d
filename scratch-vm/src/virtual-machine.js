@@ -27,6 +27,8 @@ const {serializeSounds, serializeCostumes} = require('./serialization/serialize-
 require('canvas-toBlob');
 const {exportCostume} = require('./serialization/tw-costume-import-export');
 const Base64Util = require('./util/base64-util');
+const BlockSupport = require('./engine/block-support');
+const Screen = require('./engine/screen');
 
 const RESERVED_NAMES = ['_mouse_', '_stage_', '_edge_', '_myself_', '_random_'];
 
@@ -43,11 +45,26 @@ const CORE_EXTENSIONS = [
     // 'variables',
     // 'myBlocks'
     'twfiles',
-    'twvars',
+    // Global variables, arrays and objects, read and written with paths
+    'twdata',
+    // Variables of sprites and clones, and clones by id; shown in Control
     'twclonevars',
+    // Local variables of custom blocks; shown in My Blocks
     'twlocalvars',
-    // Procedural 3D objects, camera and environment
-    'three3d'
+    // Blocks of 3D sprites; the palette only shows them for 3D sprites
+    'motion3d',
+    'looks3d',
+    'sensing3d',
+    // Cameras and the environment of the current backdrop, for every target
+    'camera3d',
+    'environment3d',
+    // Collision and physics of 3D sprites; raycasts and gravity for every target
+    'physics3d',
+    // Mouse over sprites, shown in Events; 3D sound, shown in Sound for 3D sprites
+    'event3d',
+    'sound3d',
+    // Size of the screen: the reporter is shown in Sensing, the hat in Events
+    'screen'
 ];
 
 // Disable missing translation warnings in console
@@ -120,8 +137,22 @@ class VirtualMachine extends EventEmitter {
         this.runtime.on(Runtime.VISUAL_REPORT, visualReport => {
             this.emit(Runtime.VISUAL_REPORT, visualReport);
         });
+        /**
+         * True to give projects that aren't .3dsb (e.g. .sb3) a camera sprite when they are loaded. The editor
+         * turns it on; the player doesn't need one.
+         * @type {boolean}
+         */
+        this.addCameraOnImport = false;
+
         this.runtime.on(Runtime.TARGETS_UPDATE, emitProjectChanged => {
             this.emitTargetsUpdate(emitProjectChanged);
+        });
+        // Clicking a 3D sprite on the stage in the editor selects it
+        this.runtime.on('SCENE3D_PICK_TARGET', targetId => {
+            this.setEditingTarget(targetId);
+        });
+        this.runtime.on('SCENE3D_EDITOR_CHANGED', state => {
+            this.emit('SCENE3D_EDITOR_CHANGED', state);
         });
         this.runtime.on(Runtime.MONITORS_UPDATE, monitorList => {
             this.emit(Runtime.MONITORS_UPDATE, monitorList);
@@ -191,6 +222,9 @@ class VirtualMachine extends EventEmitter {
         });
         this.runtime.on(Runtime.INTERPOLATION_CHANGED, framerate => {
             this.emit(Runtime.INTERPOLATION_CHANGED, framerate);
+        });
+        this.runtime.on(Runtime.SCREEN_SETTINGS_CHANGED, settings => {
+            this.emit(Runtime.SCREEN_SETTINGS_CHANGED, settings);
         });
         this.runtime.on(Runtime.STAGE_SIZE_CHANGED, (width, height) => {
             this.emit(Runtime.STAGE_SIZE_CHANGED, width, height);
@@ -335,8 +369,27 @@ class VirtualMachine extends EventEmitter {
         this.runtime.setCompilerOptions(compilerOptions);
     }
 
+    /**
+     * Change the reference size of the screen settings (engine/screen.js); in the fixed mode that is the stage size.
+     * @param {number} width
+     * @param {number} height
+     */
     setStageSize (width, height) {
-        this.runtime.setStageSize(width, height);
+        this.runtime.setScreenSettings({width, height});
+    }
+
+    /**
+     * @param {object} settings some of mode, width, height and renderScale, see engine/screen.js
+     */
+    setScreenSettings (settings) {
+        this.runtime.setScreenSettings(settings);
+    }
+
+    /**
+     * @param {?number} aspect width / height of the screen that shows the stage
+     */
+    setViewportAspect (aspect) {
+        this.runtime.setViewportAspect(aspect);
     }
 
     setInEditor (inEditor) {
@@ -776,13 +829,19 @@ class VirtualMachine extends EventEmitter {
     deserializeProject (projectJSON, zip) {
         // Clear the current runtime
         this.clear();
+        // Projects without screen settings (.sb3, older .3dsb) keep the Scratch stage; .3dsb sets its own and
+        // stored TurboWarp settings can change the size
+        this.runtime.setScreenSettings(Screen.defaultSettings());
 
         if (typeof performance !== 'undefined') {
             performance.mark('scratch-vm-deserialize-start');
         }
         const runtime = this.runtime;
+        const is3dsb = !!(projectJSON.meta && projectJSON.meta.format === '3dsb');
+        // Projects from before paths (ROADMAP.md 4.12) have their variable blocks converted
+        const oldData = !is3dsb || !(Number(projectJSON.meta.formatVersion) >= 3);
         const deserializePromise = function () {
-            if (projectJSON.meta && projectJSON.meta.format === '3dsb') {
+            if (is3dsb) {
                 const tw3dsb = require('./serialization/3dsb');
                 return tw3dsb.deserialize(projectJSON, runtime, zip);
             }
@@ -814,7 +873,17 @@ class VirtualMachine extends EventEmitter {
                         log.error(e);
                     }
                 }
-                return this.installTargets(targets, extensions, true);
+                return this.installTargets(targets, extensions, true, oldData)
+                    .then(() => {
+                        if (is3dsb) return;
+                        // Scratch projects draw with the pen on the pen layer, which is a canvas sprite here
+                        const canvas = extensions.extensionIDs.has('pen') ? this.ensureDefaultCanvas() : null;
+                        // The editor gives imported projects a camera sprite to edit the view with. Without one,
+                        // the stage shows the same thing from the default camera.
+                        return Promise.resolve(canvas)
+                            .then(() => this.addCameraOnImport && this.ensureDefaultCamera());
+                    })
+                    .then(() => this.runtime.scene3D.onProjectLoaded());
             });
     }
 
@@ -855,12 +924,18 @@ class VirtualMachine extends EventEmitter {
      * @param {Array.<Target>} targets - the targets to be installed
      * @param {ImportedExtensionsInfo} extensions - metadata about extensions used by these targets
      * @param {boolean} wholeProject - set to true if installing a whole project, as opposed to a single sprite.
+     * @param {boolean} [oldData] - true if the targets are from before variables became paths (ROADMAP.md 4.12):
+     * their variable blocks and names are converted (see serialization/tw-data-upgrade.js)
      * @returns {Promise} resolved once targets have been installed
      */
-    async installTargets (targets, extensions, wholeProject) {
+    async installTargets (targets, extensions, wholeProject, oldData) {
         await this.extensionManager.allAsyncExtensionsLoaded();
 
         targets = targets.filter(target => !!target);
+
+        // Variable and list blocks of older projects become 資料 blocks with paths
+        require('./serialization/tw-data-upgrade').upgradeTargets(targets, this.runtime, extensions.extensionIDs,
+            !!oldData);
 
         return this._loadExtensions(extensions.extensionIDs, extensions.extensionURLs).then(() => {
             targets.forEach(target => {
@@ -966,7 +1041,114 @@ class VirtualMachine extends EventEmitter {
         const sb2 = require('./serialization/sb2');
         return sb2.deserialize(sprite, this.runtime, true, zip)
             .then(({targets, extensions}) =>
-                this.installTargets(targets, extensions, false));
+                this.installTargets(targets, extensions, false, true));
+    }
+
+    /**
+     * @param {?Target} target
+     * @returns {string} '2d' for 2D sprites and the stage, '3d' for 3D sprites, 'camera' for camera sprites
+     */
+    getTargetKind (target) {
+        return BlockSupport.kindOf(target);
+    }
+
+    /**
+     * @param {string} opcode
+     * @param {string} kind '2d', '3d' or 'camera', see getTargetKind()
+     * @returns {boolean} true if the palette of that kind of target shows the block
+     */
+    isBlockInPalette (opcode, kind) {
+        return BlockSupport.isInPalette(opcode, kind);
+    }
+
+    /**
+     * @param {string} opcode
+     * @param {string} kind '2d', '3d' or 'camera'
+     * @returns {boolean} true if the block does nothing on that kind of target, so the workspace draws it faded
+     */
+    isBlockUnsupported (opcode, kind) {
+        return BlockSupport.getBlockSupport(opcode, kind).support === BlockSupport.HIDE;
+    }
+
+    /**
+     * @param {string} kind '2d', '3d' or 'camera'
+     * @returns {string[]} what the "[property] of [sprite]" block offers for sprites of that kind, or null for the
+     * usual 2D list
+     */
+    getSpriteAttributes (kind) {
+        const attributes = BlockSupport.ATTRIBUTES[kind];
+        return attributes ? attributes.slice() : null;
+    }
+
+    /**
+     * Add a camera sprite. The first one becomes the current camera.
+     * @param {object} [options] see makeCameraJSON in serialization/3dsb.js: name, position, rotation, fov
+     * @param {boolean} [options.select] false to keep editing the current target
+     * @returns {Promise<CameraTarget>} Resolves with the new sprite once it is installed.
+     */
+    addCamera (options = {}) {
+        const tw3dsb = require('./serialization/3dsb');
+        const previousTarget = this.editingTarget;
+        return tw3dsb.deserialize(tw3dsb.makeCameraJSON(options), this.runtime, null, true)
+            .then(({targets, extensions}) => this.installTargets(targets, extensions, false).then(() => targets[0]))
+            .then(target => {
+                if (options.select === false && previousTarget && previousTarget !== target) {
+                    this.setEditingTarget(previousTarget.id);
+                } else {
+                    this.emitTargetsUpdate();
+                }
+                return target;
+            });
+    }
+
+    /**
+     * Give a project without a camera sprite one, where the default camera is, without selecting it.
+     * @returns {Promise<?CameraTarget>} the camera sprite that was added, if any
+     */
+    ensureDefaultCamera () {
+        if (this.runtime.scene3D.getCameras().length) return Promise.resolve(null);
+        const state = this.runtime.scene3D.getCameraState();
+        return this.addCamera({
+            name: '相機',
+            position: {x: state.x, y: state.y, z: state.z},
+            rotation: {x: state.pitch, y: state.yaw, z: state.roll},
+            fov: state.fov,
+            select: false
+        });
+    }
+
+    /**
+     * @param {string} targetId a camera sprite
+     */
+    setActiveCamera (targetId) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target || !target.isCamera) return;
+        this.runtime.scene3D.setActiveCamera(target);
+        this.emitTargetsUpdate();
+    }
+
+    /**
+     * @param {number} [index] a backdrop of the stage; the current one by default
+     * @returns {object} its 3D environment, see engine/scene-3d-environment.js
+     */
+    getEnvironment3D (index) {
+        return JSON.parse(JSON.stringify(this.runtime.scene3D.getEnvironment(index)));
+    }
+
+    /**
+     * @returns {object} the environment of a new project, for new environments added in the editor
+     */
+    getDefaultEnvironment3D () {
+        return require('./engine/scene-3d-environment').defaultEnvironment();
+    }
+
+    /**
+     * @param {object} changes partial environment, e.g. {sky: {type: 'color'}}
+     * @param {number} [index] a backdrop of the stage; the current one by default
+     */
+    setEnvironment3D (changes, index) {
+        this.runtime.scene3D.setEnvironment(changes, index);
+        this.emitTargetsUpdate();
     }
 
     /**
@@ -1004,6 +1186,146 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
+     * Add a new canvas sprite: a 2D sprite whose picture is a canvas that the pen and other code draw on.
+     * @param {object} [options]
+     * @param {string} [options.name] sprite name
+     * @param {boolean} [options.atBack] true to put it behind every other sprite, where the pen layer was
+     * @param {boolean} [options.select] false to keep editing the current target
+     * @returns {Promise<CanvasTarget>} Resolves with the new sprite once it is installed.
+     */
+    addCanvasSprite (options = {}) {
+        const tw3dsb = require('./serialization/3dsb');
+        const previousTarget = this.editingTarget;
+        const spriteJSON = {
+            isStage: false,
+            name: typeof options.name === 'string' && options.name ? options.name : '畫布',
+            kind: 'canvas',
+            variables: {},
+            lists: {},
+            broadcasts: {},
+            blocks: {},
+            comments: {},
+            sounds: [],
+            costumes: [],
+            volume: 100,
+            visible: true,
+            x: 0,
+            y: 0,
+            size: 100,
+            direction: 90,
+            draggable: false,
+            rotationStyle: 'all around'
+        };
+        return tw3dsb.deserialize(spriteJSON, this.runtime, null, true)
+            .then(({targets, extensions}) => this.installTargets(targets, extensions, false).then(() => targets[0]))
+            .then(target => {
+                if (options.atBack) target.goToBack();
+                if (options.select === false && previousTarget && previousTarget !== target) {
+                    this.setEditingTarget(previousTarget.id);
+                } else {
+                    this.emitTargetsUpdate();
+                }
+                return target;
+            });
+    }
+
+    /**
+     * Pen blocks draw on canvas sprites. Give projects that use the pen one to draw on if they have none, behind
+     * every sprite like the pen layer of Scratch.
+     * @returns {Promise<?CanvasTarget>} the canvas sprite that was added, if any
+     */
+    ensureDefaultCanvas () {
+        if (this.runtime.canvasSprites.getDefault()) return Promise.resolve(null);
+        return this.addCanvasSprite({name: '畫筆', atBack: true, select: false});
+    }
+
+    /**
+     * @param {string} [targetId] a sprite's id; the editing target by default
+     * @returns {?Target3D} the 3D sprite, or null if it isn't one
+     */
+    _get3DTarget (targetId) {
+        const target = targetId ? this.runtime.getTargetById(targetId) : this.editingTarget;
+        return target && target.is3D ? target : null;
+    }
+
+    /**
+     * Add a model to a 3D sprite.
+     * @param {object} model {name, shape} or {name, file} (a .glb/.gltf in the Files tab)
+     * @param {string} [targetId] the sprite; the editing target by default
+     * @returns {number} index of the new model, or -1
+     */
+    addModel3D (model, targetId) {
+        const target = this._get3DTarget(targetId);
+        if (!target) return -1;
+        const index = target.addModel(model);
+        if (index !== -1) this.emitTargetsUpdate();
+        return index;
+    }
+
+    /**
+     * @param {number} index model to delete from the editing target
+     * @returns {?function} restores the model, or null if nothing was deleted (the last model can't be)
+     */
+    deleteModel3D (index) {
+        const target = this._get3DTarget();
+        const deleted = target && target.deleteModel(index);
+        if (!deleted) return null;
+        this.emitTargetsUpdate();
+        return () => {
+            target.addModel(deleted, index);
+            this.emitTargetsUpdate();
+        };
+    }
+
+    /**
+     * @param {number} index model of the editing target
+     * @param {string} name new name; made unique among the sprite's models
+     */
+    renameModel3D (index, name) {
+        const target = this._get3DTarget();
+        if (!target) return;
+        target.renameModel(index, name);
+        this.emitTargetsUpdate();
+    }
+
+    /**
+     * @param {number} index model of the editing target to copy
+     * @returns {number} index of the copy, or -1
+     */
+    duplicateModel3D (index) {
+        const target = this._get3DTarget();
+        if (!target) return -1;
+        const newIndex = target.duplicateModel(index);
+        if (newIndex !== -1) this.emitTargetsUpdate();
+        return newIndex;
+    }
+
+    /**
+     * @param {string} targetId the 3D sprite
+     * @param {number} index model to move
+     * @param {number} newIndex where it goes
+     * @returns {boolean} true if anything moved
+     */
+    reorderModel3D (targetId, index, newIndex) {
+        const target = this._get3DTarget(targetId);
+        if (!target || !target.reorderModel(index, newIndex)) return false;
+        this.emitTargetsUpdate();
+        return true;
+    }
+
+    /**
+     * Change what a model of the editing target shows, keeping its name.
+     * @param {number} index model of the editing target
+     * @param {object} source {shape} or {file}
+     */
+    setModelSource3D (index, source) {
+        const target = this._get3DTarget();
+        if (!target) return;
+        target.setModelSource(index, source);
+        this.emitTargetsUpdate();
+    }
+
+    /**
      * Add a single sb3 sprite.
      * @param {object} sprite Object rperesenting 3.0 sprite to be added.
      * @param {?ArrayBuffer} zip Optional zip of assets being referenced by target json
@@ -1014,7 +1336,8 @@ class VirtualMachine extends EventEmitter {
         const sb3 = require('./serialization/sb3');
         return sb3
             .deserialize(sprite, this.runtime, zip, true)
-            .then(({targets, extensions}) => this.installTargets(targets, extensions, false));
+            .then(({targets, extensions}) => this.installTargets(targets, extensions, false,
+                !(Number(sprite.formatVersion) >= 3)));
     }
 
     /**
@@ -1675,16 +1998,22 @@ class VirtualMachine extends EventEmitter {
         }
 
         // Create a unique set of extensionIds that are not yet loaded
+        const dataUpgrade = require('./serialization/tw-data-upgrade');
         const extensionIDs = new Set(copiedBlocks
             .map(b => sb3.getExtensionIdForOpcode(b.opcode))
             .filter(id => !!id) // Remove ids that do not exist
             .filter(id => !this.extensionManager.isExtensionLoaded(id)) // and remove loaded extensions
+            .filter(id => !dataUpgrade.OLD_EXTENSIONS.includes(id)) // and old ones, whose blocks are converted
         );
 
         return this._loadExtensions(extensionIDs, extensionURLs).then(() => {
             copiedBlocks.forEach(block => {
                 target.blocks.createBlock(block);
             });
+            if (copiedBlocks.some(block => dataUpgrade.isOldBlock(block.opcode) ||
+                block.opcode === 'control_create_clone_of' || block.opcode === 'control_start_as_clone')) {
+                dataUpgrade.upgradeBlocks(target, copiedBlocks.map(block => block.id), this.runtime);
+            }
             target.blocks.updateTargetSpecificBlocks(target.isStage);
         });
     }

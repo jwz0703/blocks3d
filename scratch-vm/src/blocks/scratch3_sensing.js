@@ -216,8 +216,7 @@ class Scratch3SensingBlocks {
                 args.DISTANCETOMENU
             );
             if (!distTarget) return 10000;
-            targetX = distTarget.x;
-            targetY = distTarget.y;
+            ({x: targetX, y: targetY} = distTarget.getStagePosition());
         }
 
         const dx = util.target.x - targetX;
@@ -346,16 +345,9 @@ class Scratch3SensingBlocks {
             case 'volume': return attrTarget.volume;
             }
         } else {
-            switch (args.PROPERTY) {
-            case 'x position': return attrTarget.x;
-            case 'y position': return attrTarget.y;
-            case 'direction': return attrTarget.direction;
-            case 'costume #': return attrTarget.currentCostume + 1;
-            case 'costume name':
-                return attrTarget.getCostumes()[attrTarget.currentCostume].name;
-            case 'size': return attrTarget.size;
-            case 'volume': return attrTarget.volume;
-            }
+            // 2D and 3D sprites have different properties
+            const value = attrTarget.getAttribute(args.PROPERTY);
+            if (typeof value !== 'undefined') return value;
         }
 
         // Target variables.

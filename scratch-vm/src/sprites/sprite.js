@@ -51,7 +51,8 @@ class Sprite {
         this.clones = [];
 
         /**
-         * '2d' or '3d'. 3D sprites and their clones are Target3D.
+         * '2d', '3d', 'camera' or 'canvas'. 3D sprites and their clones are Target3D, camera sprites CameraTarget,
+         * canvas sprites CanvasTarget.
          * @type {string}
          */
         this.kind = '2d';
@@ -119,8 +120,11 @@ class Sprite {
      * @returns {!RenderedTarget} Newly created clone.
      */
     createClone (optLayerGroup) {
-        // Required here because target-3d requires rendered-target, which is also required by this file
-        const TargetClass = this.kind === '3d' ? require('./target-3d') : RenderedTarget;
+        // Required here because these require rendered-target, which is also required by this file
+        let TargetClass = RenderedTarget;
+        if (this.kind === '3d') TargetClass = require('./target-3d');
+        else if (this.kind === 'camera') TargetClass = require('./camera-target');
+        else if (this.kind === 'canvas') TargetClass = require('./canvas-target');
         const newClone = new TargetClass(this, this.runtime);
         newClone.isOriginal = this.clones.length === 0;
         this.clones.push(newClone);

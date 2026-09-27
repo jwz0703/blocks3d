@@ -28,10 +28,22 @@ const defaultBuiltinExtensions = {
     // tw: core extension
     tw: () => require('../extensions/tw'),
     three3d: () => require('../extensions/tw_three3d'),
+    motion3d: () => require('../extensions/tw_3d/motion'),
+    looks3d: () => require('../extensions/tw_3d/looks'),
+    sensing3d: () => require('../extensions/tw_3d/sensing'),
+    camera3d: () => require('../extensions/tw_3d/camera'),
+    environment3d: () => require('../extensions/tw_3d/environment'),
+    physics3d: () => require('../extensions/tw_3d/physics'),
+    event3d: () => require('../extensions/tw_3d/events'),
+    sound3d: () => require('../extensions/tw_3d/sound'),
     twfiles: () => require('../extensions/tw_files'),
-    twvars: () => require('../extensions/tw_vars'),
+    screen: () => require('../extensions/tw_screen'),
+    twdata: () => require('../extensions/tw_data'),
     twclonevars: () => require('../extensions/tw_clone_vars'),
-    twlocalvars: () => require('../extensions/tw_local_vars')
+    twlocalvars: () => require('../extensions/tw_local_vars'),
+    // In the extension library
+    twvector: () => require('../extensions/tw_vector'),
+    joystick: () => require('../extensions/tw_joystick')
 };
 
 /**

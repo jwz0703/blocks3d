@@ -512,6 +512,11 @@ class IROptimizer {
         case InputOpcode.ADDON_CALL:
             modified = state.clear() || modified;
             break;
+        case InputOpcode.PROCEDURE_CALL_SPRITE:
+            // The other sprite's custom block can change any variable
+            modified = this.analyzeInputs(inputs.args, state) || modified;
+            modified = state.clear() || modified;
+            break;
         case InputOpcode.PROCEDURE_CALL: {
             modified = this.analyzeInputs(inputs.inputs, state) || modified;
             const script = this.ir.procedures[inputs.variant];
@@ -620,6 +625,17 @@ class IROptimizer {
             }
             break;
         }
+        case StackOpcode.PROCEDURE_CALL_SPRITE:
+            // The other sprite's custom block can change any variable
+            modified = this.analyzeInputs(inputs, state) || modified;
+            modified = this.analyzeInputs(inputs.args, state) || modified;
+            modified = state.clear() || modified;
+            break;
+        case StackOpcode.DATA_OP:
+            // Paths can change any variable
+            modified = this.analyzeInputs(inputs, state) || modified;
+            modified = state.clear() || modified;
+            break;
         case StackOpcode.COMPATIBILITY_LAYER: {
             modified = this.analyzeInputs(inputs, state) || modified;
             this.analyzeInputs(inputs.inputs, state);

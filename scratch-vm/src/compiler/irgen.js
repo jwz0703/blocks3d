@@ -16,6 +16,9 @@ const {
     IntermediateRepresentation
 } = require('./intermediate');
 const oldCompilerCompatiblity = require('./old-compiler-compatibility.js');
+const BlockSupport = require('../engine/block-support');
+const DataPath = require('../util/data-path');
+const PathBlocks = require('../extensions/tw_data/path-blocks');
 
 /**
  * @fileoverview Generate intermediate representations from Scratch blocks.
@@ -70,6 +73,11 @@ class ScriptTreeGenerator {
         this.runtime = this.target.runtime;
         /** @private */
         this.stage = this.runtime.getTargetForStage();
+        /**
+         * '2d', '3d' or 'camera'. Clones share their sprite's scripts, and a sprite's kind never changes.
+         * @private
+         */
+        this.kind = BlockSupport.kindOf(this.target);
 
         /**
          * This script's intermediate representation.
@@ -220,6 +228,13 @@ class ScriptTreeGenerator {
                 return oldCompilerResult;
             }
         }
+
+        // Blocks that act differently on this kind of target go through getOpcodeFunction(), which knows how
+        if (this.isKindSpecific(block.opcode)) {
+            return this.descendCompatLayerInput(block);
+        }
+        const input3D = this.descend3DInput(block);
+        if (input3D) return input3D;
 
         switch (block.opcode) {
         case 'colour_picker':
@@ -479,6 +494,9 @@ class ScriptTreeGenerator {
             const procedureInfo = this.getProcedureInfo(block);
             return new IntermediateInput(procedureInfo.opcode, InputType.ANY, procedureInfo.inputs, procedureInfo.yields);
         }
+        case 'procedures_callsprite_reporter':
+            return new IntermediateInput(InputOpcode.PROCEDURE_CALL_SPRITE, InputType.ANY,
+                this.descendCrossCall(block, 'sprite'), true);
 
         case 'sensing_answer':
             return new IntermediateInput(InputOpcode.SENSING_ANSWER, InputType.STRING);
@@ -534,6 +552,12 @@ class ScriptTreeGenerator {
             const object = this.descendInputOfBlock(block, 'OBJECT').toType(InputType.STRING);
 
             if (object.opcode !== InputOpcode.CONSTANT) {
+                return new IntermediateInput(InputOpcode.SENSING_OF, InputType.ANY, {object, property});
+            }
+
+            // Properties of 3D sprites, which the generic path knows
+            if (BlockSupport.ATTRIBUTES_3D.includes(property) && property !== 'x position' &&
+                property !== 'y position') {
                 return new IntermediateInput(InputOpcode.SENSING_OF, InputType.ANY, {object, property});
             }
 
@@ -610,16 +634,20 @@ class ScriptTreeGenerator {
         case 'tw_getLastKeyPressed':
             return new IntermediateInput(InputOpcode.TW_KEY_LAST_PRESSED, InputType.STRING);
 
-        case 'twlocalvars_getVariable':
-            return new IntermediateInput(InputOpcode.LOCAL_GET, InputType.ANY, {
-                name: this.descendInputOfBlock(block, 'NAME').toType(InputType.STRING)
-            });
-        case 'twlocalvars_variableExists':
-            return new IntermediateInput(InputOpcode.LOCAL_EXISTS, InputType.BOOLEAN, {
-                name: this.descendInputOfBlock(block, 'NAME').toType(InputType.STRING)
-            });
+        case 'control_start_as_clone_id':
+            return new IntermediateInput(InputOpcode.CONTROL_CLONE_ID, InputType.ANY);
+
+        case 'data_text': {
+            const text = block.fields.TEXT ? `${block.fields.TEXT.value}` : '';
+            const parts = DataPath.parseTemplate(text);
+            if (parts.every(part => typeof part === 'string')) return this.createConstantInput(text, true);
+            return new IntermediateInput(InputOpcode.DATA_TEMPLATE, InputType.STRING, {parts});
+        }
 
         default: {
+            const dataInput = this.descendDataBlock(block);
+            if (dataInput) return dataInput;
+
             const opcodeFunction = this.runtime.getOpcodeFunction(block.opcode);
             if (opcodeFunction) {
                 // It might be a non-compiled primitive from a standard category
@@ -663,6 +691,12 @@ class ScriptTreeGenerator {
             }
         }
 
+        if (this.isKindSpecific(block.opcode)) {
+            return this.descendCompatLayerStack(block);
+        }
+        const stack3D = this.descend3DStackedBlock(block);
+        if (stack3D) return stack3D;
+
         switch (block.opcode) {
         case 'control_all_at_once':
         case 'control_fold':
@@ -674,7 +708,9 @@ class ScriptTreeGenerator {
             });
         case 'control_create_clone_of':
             return new IntermediateStackBlock(StackOpcode.CONTROL_CLONE_CREATE, {
-                target: this.descendInputOfBlock(block, 'CLONE_OPTION').toType(InputType.STRING)
+                target: this.descendInputOfBlock(block, 'CLONE_OPTION').toType(InputType.STRING),
+                // Old blocks have no id: the clone gets the next number
+                id: block.inputs.ID ? this.descendInputOfBlock(block, 'ID', true) : this.createConstantInput('')
             });
         case 'control_delete_this_clone':
             return new IntermediateStackBlock(StackOpcode.CONTROL_CLONE_DELETE, {}, true);
@@ -1001,6 +1037,15 @@ class ScriptTreeGenerator {
         case 'pen_stamp':
             return new IntermediateStackBlock(StackOpcode.PEN_STAMP);
 
+        case 'procedures_callsprite':
+            return new IntermediateStackBlock(StackOpcode.PROCEDURE_CALL_SPRITE,
+                this.descendCrossCall(block, 'sprite'), true);
+        case 'procedures_callsprite_each':
+            return new IntermediateStackBlock(StackOpcode.PROCEDURE_CALL_SPRITE,
+                this.descendCrossCall(block, 'each'), true);
+        case 'procedures_callsprite_id':
+            return new IntermediateStackBlock(StackOpcode.PROCEDURE_CALL_SPRITE,
+                this.descendCrossCall(block, 'id'), true);
         case 'procedures_call': {
             const procedureCode = block.mutation.proccode;
 
@@ -1026,18 +1071,17 @@ class ScriptTreeGenerator {
         case 'sensing_resettimer':
             return new IntermediateStackBlock(StackOpcode.SENSING_TIMER_RESET);
 
-        case 'twlocalvars_setVariable':
-            return new IntermediateStackBlock(StackOpcode.LOCAL_SET, {
-                name: this.descendInputOfBlock(block, 'NAME').toType(InputType.STRING),
-                value: this.descendInputOfBlock(block, 'VALUE')
-            });
-        case 'twlocalvars_changeVariable':
-            return new IntermediateStackBlock(StackOpcode.LOCAL_CHANGE, {
-                name: this.descendInputOfBlock(block, 'NAME').toType(InputType.STRING),
-                value: this.descendInputOfBlock(block, 'VALUE').toType(InputType.NUMBER)
-            });
 
         default: {
+            // Path blocks that are commands; reporters (e.g. clicked on their own) are visual reports below
+            const dataBlockInfo = this.getBlockInfo(block.opcode);
+            if (dataBlockInfo && dataBlockInfo.info.blockType === BlockType.COMMAND) {
+                const dataInput = this.descendDataBlock(block);
+                if (dataInput && dataInput.opcode === InputOpcode.DATA_OP) {
+                    return new IntermediateStackBlock(StackOpcode.DATA_OP, dataInput.inputs);
+                }
+            }
+
             const opcodeFunction = this.runtime.getOpcodeFunction(block.opcode);
             if (opcodeFunction) {
                 // It might be a non-compiled primitive from a standard category
@@ -1332,11 +1376,188 @@ class ScriptTreeGenerator {
     }
 
     /**
+     * The inputs of a block that calls a custom block of another sprite (engine/cross-call.js).
+     * @param {*} block procedures_callsprite, procedures_callsprite_each, procedures_callsprite_id or
+     * procedures_callsprite_reporter
+     * @param {string} mode 'sprite', 'each' or 'id'
+     * @returns {object} inputs of the node
+     * @private
+     */
+    descendCrossCall (block, mode) {
+        const mutation = block.mutation || {};
+        // Every input but ID is an argument, named by the argument's id
+        const args = {};
+        for (const name of Object.keys(block.inputs)) {
+            if (name !== 'ID') args[name] = this.descendInputOfBlock(block, name, true);
+        }
+        return {
+            mode,
+            sprite: block.fields.SPRITE ? `${block.fields.SPRITE.value}` : '',
+            id: mode === 'id' ? this.descendInputOfBlock(block, 'ID') : null,
+            // The function menu's value is the prototype's id too
+            prototypeId: mutation.prototypeid || (block.fields.FUNCTION ? `${block.fields.FUNCTION.value}` : null),
+            proccode: mutation.proccode || null,
+            args
+        };
+    }
+
+    /**
+     * @param {string} field a number field of 3D sprites, e.g. 'z' or 'rotationY'
+     * @param {boolean} [raw] true for the exact value; otherwise floating point error is hidden like the reporters do
+     * @returns {IntermediateInput} its value on the target running the script
+     * @private
+     */
+    create3DFieldInput (field, raw) {
+        return new IntermediateInput(InputOpcode.MOTION3D_FIELD_GET, InputType.NUMBER, {field, raw: !!raw});
+    }
+
+    /**
+     * Reporters of 3D sprites and camera sprites that read the target's fields directly (ROADMAP.md, stage 5).
+     * @param {*} block
+     * @returns {?IntermediateInput} the node, or null if the block isn't one of them or this isn't a 3D target
+     * @private
+     */
+    descend3DInput (block) {
+        if (this.kind === '2d') return null;
+        switch (block.opcode) {
+        case 'motion3d_xposition': return this.create3DFieldInput('x');
+        case 'motion3d_yposition': return this.create3DFieldInput('y');
+        case 'motion3d_zposition': return this.create3DFieldInput('z');
+        case 'motion3d_yaw': return this.create3DFieldInput('rotationY');
+        case 'motion3d_pitch': return this.create3DFieldInput('rotationX');
+        case 'motion3d_roll': return this.create3DFieldInput('rotationZ');
+        case 'camera3d_fov': return this.kind === 'camera' ? this.create3DFieldInput('fov', true) : null;
+        }
+        return null;
+    }
+
+    /**
+     * Commands of 3D sprites and camera sprites that change the target's fields directly instead of going through
+     * the extension's function (ROADMAP.md, stage 5). They do exactly what the functions in tw_3d do.
+     * @param {*} block
+     * @returns {?IntermediateStackBlock} the node, or null if the block isn't one of them or this isn't a 3D target
+     * @private
+     */
+    descend3DStackedBlock (block) {
+        if (this.kind === '2d') return null;
+        const number = name => this.descendInputOfBlock(block, name).toType(InputType.NUMBER);
+        const axes = {x: 'x', y: 'y', z: 'z'};
+        // Rotation is (x, y, z) = (pitch, yaw, roll)
+        const angles = {pitch: 'x', yaw: 'y', roll: 'z'};
+        const angleFields = {x: 'rotationX', y: 'rotationY', z: 'rotationZ'};
+        const field = name => (block.fields[name] ? block.fields[name].value : null);
+        switch (block.opcode) {
+        case 'motion3d_gotoxyz':
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_XYZ_SET, {
+                x: number('X'),
+                y: number('Y'),
+                z: number('Z')
+            });
+        case 'motion3d_setaxis': {
+            const axis = axes[field('AXIS')];
+            if (!axis) return new IntermediateStackBlock(StackOpcode.NOP);
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_XYZ_SET, {[axis]: number('VALUE')});
+        }
+        case 'motion3d_changeaxis': {
+            const axis = axes[field('AXIS')];
+            if (!axis) return new IntermediateStackBlock(StackOpcode.NOP);
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_XYZ_SET, {
+                [axis]: new IntermediateInput(InputOpcode.OP_ADD, InputType.NUMBER_OR_NAN, {
+                    left: this.create3DFieldInput(axis, true),
+                    right: number('VALUE')
+                }).toType(InputType.NUMBER)
+            });
+        }
+        case 'motion3d_setangle': {
+            const axis = angles[field('ANGLE')];
+            if (!axis) return new IntermediateStackBlock(StackOpcode.NOP);
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_ROTATION_SET, {[axis]: number('DEGREES')});
+        }
+        case 'motion3d_turn': {
+            const axis = angles[field('ANGLE')];
+            if (!axis) return new IntermediateStackBlock(StackOpcode.NOP);
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_ROTATION_SET, {
+                [axis]: new IntermediateInput(InputOpcode.OP_ADD, InputType.NUMBER_OR_NAN, {
+                    left: this.create3DFieldInput(angleFields[axis], true),
+                    right: number('DEGREES')
+                }).toType(InputType.NUMBER)
+            });
+        }
+        case 'motion3d_moveforward':
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_MOVE_FORWARD, {steps: number('STEPS')});
+        case 'motion3d_movelevel':
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_MOVE_LEVEL, {
+                direction: this.descendInputOfBlock(block, 'DIRECTION').toType(InputType.STRING),
+                steps: number('STEPS')
+            });
+        case 'motion3d_facexyz':
+            return new IntermediateStackBlock(StackOpcode.MOTION3D_LOOK_AT, {
+                x: number('X'),
+                y: number('Y'),
+                z: number('Z')
+            });
+        case 'looks3d_setscale':
+            return new IntermediateStackBlock(StackOpcode.LOOKS3D_SCALE_SET, {scale: number('SCALE')});
+        case 'looks3d_setscalexyz':
+            return new IntermediateStackBlock(StackOpcode.LOOKS3D_SCALE_SET, {
+                x: number('X'),
+                y: number('Y'),
+                z: number('Z')
+            });
+        case 'camera3d_setfov':
+            if (this.kind !== 'camera') return null;
+            return new IntermediateStackBlock(StackOpcode.CAMERA3D_FOV_SET, {fov: number('FOV')});
+        case 'camera3d_changefov':
+            if (this.kind !== 'camera') return null;
+            return new IntermediateStackBlock(StackOpcode.CAMERA3D_FOV_SET, {
+                fov: new IntermediateInput(InputOpcode.OP_ADD, InputType.NUMBER_OR_NAN, {
+                    left: this.create3DFieldInput('fov', true),
+                    right: number('FOV')
+                }).toType(InputType.NUMBER)
+            });
+        }
+        return null;
+    }
+
+    /**
+     * @param {string} opcode
+     * @returns {boolean} true if the block doesn't work as is on this kind of target (see block-support.js)
+     * @private
+     */
+    isKindSpecific (opcode) {
+        return BlockSupport.getBlockSupport(opcode, this.kind).support !== BlockSupport.KEEP &&
+            !!this.runtime.getOpcodeFunction(opcode);
+    }
+
+    /**
      * Descend into an input block that uses the compatibility layer.
      * @param {*} block The block to use the compatibility layer for.
      * @private
      * @returns {IntermediateInput} The parsed node.
      */
+    /**
+     * The blocks that work with paths (資料, 分身變數, 區域變數; see extensions/tw_data/path-blocks.js) are compiled
+     * here, since they need the local variables of the generated function. Their paths are parsed by jsgen when they
+     * are constant.
+     * @param {*} block
+     * @returns {?IntermediateInput} the block, or null if it isn't one of them
+     * @private
+     */
+    descendDataBlock (block) {
+        const opcode = block.opcode;
+        if (Object.prototype.hasOwnProperty.call(PathBlocks.SCOPE_BLOCKS, opcode)) {
+            return new IntermediateInput(InputOpcode.DATA_SCOPE, InputType.ANY, {scope: PathBlocks.SCOPE_BLOCKS[opcode]});
+        }
+        if (!Object.prototype.hasOwnProperty.call(PathBlocks.PATH_BLOCKS, opcode)) return null;
+        const info = PathBlocks.PATH_BLOCKS[opcode];
+        const inputs = {op: opcode};
+        for (const argName of info.args) {
+            inputs[argName] = this.descendInputOfBlock(block, argName, true);
+        }
+        const type = info.fn === 'exists' || info.fn === 'contains' ? InputType.BOOLEAN : InputType.ANY;
+        return new IntermediateInput(InputOpcode.DATA_OP, type, inputs);
+    }
+
     descendCompatLayerInput (block) {
         const inputs = {};
         const fields = {};
@@ -1596,10 +1817,13 @@ class IRGenerator {
     }
 
     /**
+     * @param {string[]} [extraProcedures] variants of procedures to compile even if the script doesn't use them, e.g.
+     * a custom block that other sprites call (see engine/cross-call.js)
      * @returns {IntermediateRepresentation} Intermediate representation.
      */
-    generate () {
+    generate (extraProcedures) {
         const entry = this.generateScriptTree(new ScriptTreeGenerator(this.thread), this.thread.topBlock);
+        if (extraProcedures) this.addProcedureDependencies(extraProcedures);
 
         // Compile any required procedures.
         // As procedures can depend on other procedures, this process may take several iterations.
@@ -1629,6 +1853,15 @@ class IRGenerator {
         while (this.analyzeScript(entry)) {
             // Reset so all procedures get re-examined each pass.
             this.analyzedProcedures = new Set();
+        }
+        // Procedures that the entry doesn't use still yield if a procedure they use does
+        for (const procedureVariant of extraProcedures || []) {
+            const procedure = this.procedures[procedureVariant];
+            if (!procedure) continue;
+            this.analyzedProcedures = new Set();
+            while (this.analyzeScript(procedure)) {
+                this.analyzedProcedures = new Set();
+            }
         }
 
         return new IntermediateRepresentation(entry, this.procedures);

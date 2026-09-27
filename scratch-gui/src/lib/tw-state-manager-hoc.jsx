@@ -19,7 +19,6 @@ import {
 } from '../reducers/mode';
 import {generateRandomUsername} from './tw-username';
 import {setSearchParams} from './tw-navigation-utils';
-import {defaultStageSize} from '../reducers/custom-stage-size';
 
 /* eslint-disable no-alert */
 
@@ -372,7 +371,6 @@ const TWStateManager = function (WrappedComponent) {
             }
 
             if (
-                this.props.customStageSize !== prevProps.customStageSize ||
                 this.props.runtimeOptions !== prevProps.runtimeOptions ||
                 this.props.compilerOptions !== prevProps.compilerOptions ||
                 this.props.highQualityPen !== prevProps.highQualityPen ||
@@ -386,12 +384,8 @@ const TWStateManager = function (WrappedComponent) {
                 // Always remove legacy parameter
                 searchParams.delete('60fps');
 
-                const {width, height} = this.props.customStageSize;
-                if (width === defaultStageSize.width && height === defaultStageSize.height) {
-                    searchParams.delete('size');
-                } else {
-                    searchParams.set('size', `${width}x${height}`);
-                }
+                // The stage size follows the screen settings of the project (reducers/screen.js)
+                searchParams.delete('size');
 
                 if (this.props.framerate === 60) {
                     searchParams.delete('fps');

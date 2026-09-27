@@ -4,14 +4,14 @@
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
 const b0 = runtime.getOpcodeFunction("sound_setvolumeto");
-const b1 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 yield* executeInCompatibilityLayer({"VOLUME":0,}, b0, false, false, "d", null);
-b1.value = 0;
+dataPath.set(target, null, b1, 0);
 runtime.ext_scratch3_looks._say("plan 1", target);
 yield* thread.procedures["Wno refresh"]();
 yield* thread.procedures["Wruns below with no refresh"]();
-if (compareEqual(b1.value, 0)) {
+if (compareEqual(dataPath.get(target, null, b1), 0)) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -71,10 +71,10 @@ return "";
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 while (true) {
-b0.value = (toNotNaN(+b0.value) + 1);
+dataPath.change(target, null, b0, 1);
 yield;
 }
 retire(); return;

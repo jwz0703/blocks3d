@@ -2,7 +2,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 import {connect} from 'react-redux';
 import {setStageDisplayWidth} from '../reducers/stage-size';
-import {getStageDimensions} from '../lib/screen-utils';
+import {STAGE_BOX_ASPECT_INVERSE, getStageBoxWidth} from '../lib/screen-utils';
 import {STAGE_DISPLAY_SIZES} from '../lib/layout-constants';
 import styles from '../components/gui/gui.css';
 
@@ -33,9 +33,11 @@ class StageResizer extends React.Component {
     handlePointerDown (e) {
         if (e.button !== 0) return;
         e.preventDefault();
-        const {customStageSize, stageSize, stageDisplayWidth} = this.props;
+        const {stageSize, stageDisplayWidth} = this.props;
         this.startX = e.clientX;
-        this.startWidth = getStageDimensions(stageSize, customStageSize, false, stageDisplayWidth).width;
+        // The dragged width is the width of the 4:3 box the stage fits in, not of the stage: a tall (e.g. 9:16)
+        // stage is narrower than its box
+        this.startWidth = getStageBoxWidth(stageSize, stageDisplayWidth);
         this.dragging = true;
         this.el.setPointerCapture(e.pointerId);
         this.el.addEventListener('pointermove', this.handlePointerMove);
@@ -53,9 +55,11 @@ class StageResizer extends React.Component {
         const {customStageSize, isRtl} = this.props;
         const delta = isRtl ? e.clientX - this.startX : this.startX - e.clientX;
         const aspect = customStageSize.width / customStageSize.height;
+        // The stage is as tall as the box when it is 4:3 or taller, and box width / aspect when it is wider
+        const boxWidthPerStageHeight = Math.max(aspect, 1 / STAGE_BOX_ASPECT_INVERSE);
         const maxWidth = Math.max(MIN_STAGE_WIDTH, Math.min(
             window.innerWidth - MIN_EDITOR_WIDTH - STAGE_COLUMN_CHROME,
-            (window.innerHeight - MIN_NON_STAGE_HEIGHT) * aspect
+            (window.innerHeight - MIN_NON_STAGE_HEIGHT) * boxWidthPerStageHeight
         ));
         const width = Math.round(Math.min(maxWidth, Math.max(MIN_STAGE_WIDTH, this.startWidth + delta)));
         if (width === this.props.stageDisplayWidth) return;

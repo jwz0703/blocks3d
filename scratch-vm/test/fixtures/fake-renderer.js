@@ -34,6 +34,8 @@ FakeRenderer.prototype.getFencedPositionOfDrawable = function (d, p) { // eslint
 FakeRenderer.prototype.updateDrawableSkinId = function (d, skinId) { // eslint-disable-line no-unused-vars
 };
 
+FakeRenderer.prototype.updateDrawableScale = function (d, scale) { // eslint-disable-line no-unused-vars
+};
 FakeRenderer.prototype.updateDrawablePosition = function (d, position) { // eslint-disable-line no-unused-vars
     this.x = position[0];
     this.y = position[1];

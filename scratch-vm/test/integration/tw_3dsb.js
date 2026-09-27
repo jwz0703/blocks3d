@@ -7,12 +7,14 @@ const VirtualMachine = require('../../src/virtual-machine');
 const makeTestStorage = require('../fixtures/make-test-storage');
 const tw3dsb = require('../../src/serialization/3dsb');
 const placeholder = require('../../src/sprites/tw-3d-placeholder');
+const Environment = require('../../src/engine/scene-3d-environment');
 
 const sb3Fixture = fs.readFileSync(pathUtil.join(__dirname, '..', 'fixtures', 'tw-save-project-sb3.sb3'));
 
 const makeVM = () => {
     const vm = new VirtualMachine();
     vm.attachStorage(makeTestStorage());
+    vm.addCameraOnImport = true;
     return vm;
 };
 
@@ -37,20 +39,26 @@ const add3DSprite = async vm => {
     return vm.runtime.targets.find(target => target.getName() === 'Box');
 };
 
-test('.sb3 projects are imported with only 2D sprites and saved as .3dsb', async t => {
+test('.sb3 projects are imported with only 2D sprites and a camera, and saved as .3dsb', async t => {
     const vm = makeVM();
     await vm.loadProject(sb3Fixture);
-    const sprites = vm.runtime.targets.filter(target => !target.isStage);
+    const sprites = vm.runtime.targets.filter(target => !target.isStage && !target.isCamera);
     t.ok(sprites.length > 0);
     t.ok(sprites.every(target => !target.is3D), 'no 3D sprites');
+    const cameras = vm.runtime.targets.filter(target => target.isCamera);
+    t.equal(cameras.length, 1, 'a camera sprite was added');
+    t.equal(vm.runtime.scene3D.getActiveCamera(), cameras[0], 'and it is the current camera');
+    t.notEqual(vm.editingTarget, cameras[0], 'but not selected');
 
     const buffer = await vm.saveProject3dsb('arraybuffer');
     const {json} = await readProjectJSON(buffer);
     t.equal(json.meta.format, '3dsb');
     t.equal(json.meta.formatVersion, tw3dsb.FORMAT_VERSION);
-    t.ok(json.targets.every(target => target.kind === '2d'), 'every target is 2d');
+    t.ok(json.targets.every(target => target.kind === (target.name === '相機' ? 'camera' : '2d')),
+        'every target is 2d, except the camera');
     const stage = json.targets.find(target => target.isStage);
-    t.same(stage.environment, vm.runtime.scene3D.environment, 'stage has the environment');
+    t.equal(stage.currentCamera, '相機', 'stage has the current camera');
+    t.ok(stage.costumes.every(costume => !costume.environment), 'backdrops are 2D backdrops');
 
     // saveProjectSb3 is only an alias now
     t.equal((await readProjectJSON(await vm.saveProjectSb3('arraybuffer'))).json.meta.format, '3dsb');
@@ -132,7 +140,7 @@ test('3D sprites and the environment are saved and loaded', async t => {
     const target = await add3DSprite(vm);
     target.setXYZ(4, 5, 6);
     vm.runtime.scene3D.setEnvironment({
-        background: {type: 'color', color: '#112233'},
+        sky: {type: 'color', color: '#112233'},
         fog: {enabled: true, near: 3, far: 30},
         sun: {intensity: 2}
     });
@@ -152,9 +160,11 @@ test('3D sprites and the environment are saved and loaded', async t => {
     t.notOk('x' in saved || 'direction' in saved || 'size' in saved, 'no 2D properties');
     t.notOk(zip.file(`${placeholder.MD5}.svg`), 'placeholder costume is not saved');
     const stage = json.targets.find(t2 => t2.isStage);
-    t.equal(stage.environment.background.color, '#112233');
-    t.equal(stage.environment.fog.enabled, true);
-    t.equal(stage.environment.fog.far, 30);
+    const environment = stage.costumes[stage.currentCostume].environment;
+    t.equal(environment.sky.type, 'color');
+    t.equal(environment.sky.color, '#112233');
+    t.equal(environment.fog.enabled, true);
+    t.equal(environment.fog.far, 30);
 
     const vm2 = makeVM();
     await vm2.loadProject(buffer);
@@ -167,10 +177,10 @@ test('3D sprites and the environment are saved and loaded', async t => {
     t.same(vm2.runtime.scene3D.environment, vm.runtime.scene3D.environment);
     t.ok(vm2.runtime.scene3D.targets.has(loaded));
 
-    // Loading another project clears the scene
+    // Loading another project clears the scene, except for its new camera
     await vm2.loadProject(sb3Fixture);
-    t.equal(vm2.runtime.scene3D.targets.size, 0);
-    t.same(vm2.runtime.scene3D.environment, vm2.runtime.scene3D.constructor.defaultEnvironment());
+    t.same(Array.from(vm2.runtime.scene3D.targets).map(t2 => t2.kind), ['camera']);
+    t.same(vm2.runtime.scene3D.environment, Environment.default2DEnvironment());
     t.end();
 });
 

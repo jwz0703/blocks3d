@@ -92,7 +92,40 @@ class Cast {
      * @return {string} The Scratch-casted string value.
      */
     static toString (value) {
+        if (typeof value === 'object' && value !== null) return Cast.stringifyObject(value);
         return String(value);
+    }
+
+    /**
+     * How objects and arrays (see util/data-path.js) appear in text fields: as JSON.
+     * @param {object} value object, array, or anything with toJSON()
+     * @param {boolean} [pretty] true to indent it
+     * @returns {string} JSON text; a value seen again inside itself becomes null
+     */
+    static stringifyObject (value, pretty) {
+        // Containers above the current one, so that a value inside itself becomes null
+        const seen = new Set();
+        try {
+            const walk = item => {
+                if (typeof item !== 'object' || item === null) return item;
+                if (typeof item.toJSON === 'function') item = item.toJSON();
+                if (typeof item !== 'object' || item === null) return item;
+                if (seen.has(item)) return null;
+                seen.add(item);
+                let result;
+                if (Array.isArray(item)) {
+                    result = item.map(walk);
+                } else {
+                    result = {};
+                    for (const key of Object.keys(item)) result[key] = walk(item[key]);
+                }
+                seen.delete(item);
+                return result;
+            };
+            return JSON.stringify(walk(value), null, pretty ? 2 : void 0);
+        } catch (e) {
+            return String(value);
+        }
     }
 
     /**
@@ -150,8 +183,8 @@ class Cast {
         if (isNaN(n1) || isNaN(n2)) {
             // At least one argument can't be converted to a number.
             // Scratch compares strings as case insensitive.
-            const s1 = String(v1).toLowerCase();
-            const s2 = String(v2).toLowerCase();
+            const s1 = Cast.toString(v1).toLowerCase();
+            const s2 = Cast.toString(v2).toLowerCase();
             if (s1 < s2) {
                 return -1;
             } else if (s1 > s2) {

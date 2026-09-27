@@ -7,6 +7,7 @@ import {getEventXY} from '../lib/touch-utils';
 import {getVariableValue, setVariableValue} from '../lib/variable-utils';
 import ListMonitorComponent from '../components/monitor/list-monitor.jsx';
 import {safeStringify} from '../lib/tw-safe-stringify.js';
+import {getUIScale} from '../reducers/screen';
 
 class ListMonitor extends React.Component {
     constructor (props) {
@@ -145,14 +146,17 @@ class ListMonitor extends React.Component {
         this.initialPosition = getEventXY(e);
         this.initialWidth = this.state.width;
         this.initialHeight = this.state.height;
+        // Monitors are placed in stage units divided by the UI scale (see components/monitor-list)
+        const maxWidth = this.props.customStageSize.width / this.props.uiScale;
+        const maxHeight = this.props.customStageSize.height / this.props.uiScale;
 
         const onMouseMove = ev => {
             const newPosition = getEventXY(ev);
             const dx = newPosition.x - this.initialPosition.x;
             const dy = newPosition.y - this.initialPosition.y;
             this.setState({
-                width: Math.max(Math.min(this.initialWidth + dx, this.props.customStageSize.width), 100),
-                height: Math.max(Math.min(this.initialHeight + dy, this.props.customStageSize.height), 60)
+                width: Math.max(Math.min(this.initialWidth + dx, maxWidth), 100),
+                height: Math.max(Math.min(this.initialHeight + dy, maxHeight), 60)
             });
         };
 
@@ -204,6 +208,7 @@ class ListMonitor extends React.Component {
 ListMonitor.propTypes = {
     height: PropTypes.number,
     id: PropTypes.string,
+    uiScale: PropTypes.number,
     customStageSize: PropTypes.shape({
         width: PropTypes.number,
         height: PropTypes.number
@@ -221,6 +226,7 @@ ListMonitor.propTypes = {
 
 const mapStateToProps = state => ({
     customStageSize: state.scratchGui.customStageSize,
+    uiScale: getUIScale(state.scratchGui.screen.settings),
     vm: state.scratchGui.vm
 });
 

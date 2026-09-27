@@ -59,7 +59,8 @@ class _StackFrame {
         this.params = null;
 
         /**
-         * Local variables of the custom block call whose parameters are on this frame (twlocalvars).
+         * Local variables (local. paths, see util/data-path.js) of the custom block call whose parameters are on
+         * this frame.
          * @type {?Map<string, *>}
          */
         this.locals = null;
@@ -206,6 +207,19 @@ class Thread {
         this.justReported = null;
 
         this.triedToCompile = false;
+
+        /**
+         * The per-frame phase ('update' or 'lateupdate') whose hat started this thread, if any. Such threads only
+         * run during their phase, see Runtime._runFramePhase().
+         * @type {?string}
+         */
+        this.framePhase = null;
+
+        /**
+         * The threads that "broadcast and wait" waits for, while it waits.
+         * @type {?Thread[]}
+         */
+        this.waitingForThreads = null;
 
         this.isCompiled = false;
 

@@ -69,7 +69,9 @@ test('toString', t => {
 
     // Undefined & object
     t.strictEqual(cast.toString(undefined), 'undefined');
-    t.strictEqual(cast.toString({}), '[object Object]');
+    // Objects and arrays are shown as JSON (ROADMAP.md 4.12)
+    t.strictEqual(cast.toString({}), '{}');
+    t.strictEqual(cast.toString({a: [1, 'b']}), '{"a":[1,"b"]}');
     t.end();
 });
 
@@ -135,7 +137,8 @@ test('compare', t => {
     t.strictEqual(cast.compare(undefined, undefined), 0);
     t.strictEqual(cast.compare(undefined, 'undefined'), 0);
     t.strictEqual(cast.compare({}, {}), 0);
-    t.strictEqual(cast.compare({}, '[object Object]'), 0);
+    t.strictEqual(cast.compare({}, '{}'), 0);
+    t.strictEqual(cast.compare([1, 2], '[1,2]'), 0);
     t.end();
 });
 

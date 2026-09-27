@@ -7,7 +7,6 @@ const Color = require('../../util/color');
 const formatMessage = require('format-message');
 const MathUtil = require('../../util/math-util');
 const log = require('../../util/log');
-const StageLayering = require('../../engine/stage-layering');
 
 /**
  * Icon svg to be displayed at the left edge of each extension block, encoded as a data URI.
@@ -49,25 +48,10 @@ class Scratch3PenBlocks {
          */
         this.runtime = runtime;
 
-        /**
-         * The ID of the renderer Drawable corresponding to the pen layer.
-         * @type {int}
-         * @private
-         */
-        this._penDrawableId = -1;
-
-        /**
-         * The ID of the renderer Skin corresponding to the pen layer.
-         * @type {int}
-         * @private
-         */
-        this._penSkinId = -1;
-
         this._onTargetCreated = this._onTargetCreated.bind(this);
         this._onTargetMoved = this._onTargetMoved.bind(this);
 
         runtime.on('targetWasCreated', this._onTargetCreated);
-        runtime.on('RUNTIME_DISPOSED', this.clear.bind(this));
     }
 
     /**
@@ -82,6 +66,8 @@ class Scratch3PenBlocks {
             brightness: 100,
             transparency: 0,
             _shade: 50, // Used only for legacy `change shade by` blocks
+            // Name of the canvas sprite to draw on; '' for the first one
+            canvas: '',
             penAttributes: {
                 color4f: [0, 0, 1, 1],
                 diameter: 1
@@ -131,22 +117,14 @@ class Scratch3PenBlocks {
     }
 
     /**
-     * Retrieve the ID of the renderer "Skin" corresponding to the pen layer. If
-     * the pen Skin doesn't yet exist, create it.
-     * @returns {int} the Skin ID of the pen layer, or -1 on failure.
+     * @param {?Target} target the target drawing, or null for any
+     * @returns {?CanvasTarget} the canvas sprite it draws on: the one it chose, or else the first one
      * @private
      */
-    _getPenLayerID () {
-        const renderer = this.runtime.renderer;
-        if (this._penSkinId < 0 && renderer) {
-            this._penSkinId = renderer.createPenSkin();
-            this._penDrawableId = renderer.createDrawable(StageLayering.PEN_LAYER);
-            if (renderer.markDrawableAsNoninteractive) {
-                renderer.markDrawableAsNoninteractive(this._penDrawableId);
-            }
-            renderer.updateDrawableSkinId(this._penDrawableId, this._penSkinId);
-        }
-        return this._penSkinId;
+    _getCanvas (target) {
+        const penState = target && target.getCustomState(Scratch3PenBlocks.STATE_KEY);
+        const chosen = penState && penState.canvas && this.runtime.canvasSprites.getByName(penState.canvas);
+        return chosen || this.runtime.canvasSprites.getDefault();
     }
 
     /**
@@ -193,11 +171,10 @@ class Scratch3PenBlocks {
     _onTargetMoved (target, oldX, oldY, isForce) {
         // Only move the pen if the movement isn't forced (ie. dragged).
         if (!isForce) {
-            const penSkinId = this._getPenLayerID();
-            if (penSkinId >= 0) {
+            const canvas = this._getCanvas(target);
+            if (canvas) {
                 const penState = this._getPenState(target);
-                this.runtime.renderer.penLine(penSkinId, penState.penAttributes, oldX, oldY, target.x, target.y);
-                this.runtime.requestRedraw();
+                canvas.drawLine(penState.penAttributes, oldX, oldY, target.x, target.y);
             }
         }
     }
@@ -311,6 +288,14 @@ class Scratch3PenBlocks {
                         description: 'Label that appears in the Pen category when the stage is selected'
                     }),
                     filter: [TargetType.STAGE]
+                },
+                {
+                    opcode: 'setCanvas',
+                    blockType: BlockType.COMMAND,
+                    text: '畫在 [CANVAS] 上',
+                    arguments: {
+                        CANVAS: {type: ArgumentType.STRING, menu: 'canvas', defaultValue: ''}
+                    }
                 },
                 {
                     opcode: 'clear',
@@ -507,6 +492,10 @@ class Scratch3PenBlocks {
                 }
             ],
             menus: {
+                canvas: {
+                    acceptReporters: true,
+                    items: '_getCanvasMenu'
+                },
                 colorParam: {
                     acceptReporters: true,
                     items: this._initColorParam()
@@ -515,15 +504,36 @@ class Scratch3PenBlocks {
         };
     }
 
+    _getCanvasMenu () {
+        return [
+            {text: '第一個畫布', value: ''},
+            ...this.runtime.canvasSprites.getOriginals().map(target => ({
+                text: target.getName(),
+                value: target.getName()
+            }))
+        ];
+    }
+
     /**
-     * The pen "clear" block clears the pen layer's contents.
+     * Choose the canvas sprite that the target's pen draws on.
+     * @param {object} args - the block arguments.
+     * @param {object} util - utility object provided by the runtime.
      */
-    clear () { // used by compiler
-        const penSkinId = this._getPenLayerID();
-        if (penSkinId >= 0) {
-            this.runtime.renderer.penClear(penSkinId);
-            this.runtime.requestRedraw();
-        }
+    setCanvas (args, util) {
+        this._getPenState(util.target).canvas = Cast.toString(args.CANVAS);
+    }
+
+    /**
+     * The pen "clear" block clears the canvas that the target draws on.
+     * @param {object} [args] - the block arguments.
+     * @param {object} [util] - utility object provided by the runtime.
+     */
+    clear (args, util) {
+        this._clear(util ? util.target : null);
+    }
+    _clear (target) { // used by compiler
+        const canvas = this._getCanvas(target);
+        if (canvas) canvas.clear();
     }
 
     /**
@@ -535,11 +545,8 @@ class Scratch3PenBlocks {
         this._stamp(util.target);
     }
     _stamp (target) { // used by compiler
-        const penSkinId = this._getPenLayerID();
-        if (penSkinId >= 0) {
-            this.runtime.renderer.penStamp(penSkinId, target.drawableID);
-            this.runtime.requestRedraw();
-        }
+        const canvas = this._getCanvas(target);
+        if (canvas) canvas.stamp(target);
     }
 
     /**
@@ -558,11 +565,8 @@ class Scratch3PenBlocks {
             target.onTargetMoved = this._onTargetMoved;
         }
 
-        const penSkinId = this._getPenLayerID();
-        if (penSkinId >= 0) {
-            this.runtime.renderer.penPoint(penSkinId, penState.penAttributes, target.x, target.y);
-            this.runtime.requestRedraw();
-        }
+        const canvas = this._getCanvas(target);
+        if (canvas) canvas.drawPoint(penState.penAttributes, target.x, target.y);
     }
 
     /**

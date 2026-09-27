@@ -97,7 +97,13 @@ class Blocks {
             /**
              * tw: Whether populateProcedureCache has been run
              */
-            proceduresPopulated: false
+            proceduresPopulated: false,
+
+            /**
+             * Compiled custom blocks that other sprites call, by procedure variant (engine/cross-call.js)
+             * @type {object.<string, ?object>}
+             */
+            crossCall: {}
         };
 
         /**
@@ -623,6 +629,8 @@ class Blocks {
         this._cache.compiledScripts = {};
         this._cache.compiledProcedures = {};
         this._cache.proceduresPopulated = false;
+        // A new object, so that threads notice that their bindings of the procedures are stale (engine/cross-call.js)
+        this._cache.crossCall = {};
     }
 
     /**

@@ -11,6 +11,7 @@ import VM from 'scratch-vm';
 
 import Blocks from '../../containers/blocks.jsx';
 import CostumeTab from '../../containers/costume-tab.jsx';
+import ModelTab from '../../containers/tw-model-tab.jsx';
 import TargetPane from '../../containers/target-pane.jsx';
 import FileTab from '../../containers/tw-file-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
@@ -49,6 +50,7 @@ import styles from './gui.css';
 import addExtensionIcon from './icon--extensions.svg';
 import codeIcon from '!../../lib/tw-recolor/build!./icon--code.svg';
 import costumesIcon from '!../../lib/tw-recolor/build!./icon--costumes.svg';
+import modelTabIcon from '!../../lib/tw-recolor/build!./icon--models.svg';
 import filesIcon from '!../../lib/tw-recolor/build!./icon--files.svg';
 
 const messages = defineMessages({
@@ -101,7 +103,7 @@ const GUIComponent = props => {
         connectionModalVisible,
         costumeLibraryVisible,
         costumesTabVisible,
-        customStageSize,
+        customStageSize, // eslint-disable-line no-unused-vars
         enableCommunity,
         intl,
         isCreating,
@@ -150,6 +152,9 @@ const GUIComponent = props => {
         filesTabVisible,
         stageDisplayWidth,
         stageSizeMode,
+        targetIs3D,
+        targetIsCamera,
+        targetIsCanvas,
         targetIsStage,
         telemetryModalVisible,
         theme,
@@ -176,11 +181,8 @@ const GUIComponent = props => {
         tabSelected: classNames(tabStyles.reactTabsTabSelected, styles.isSelected)
     };
 
-    const unconstrainedWidth = (
-        UNCONSTRAINED_NON_STAGE_WIDTH +
-        FIXED_WIDTH +
-        Math.max(0, customStageSize.width - FIXED_WIDTH)
-    );
+    // The stage takes the same room whatever its size in stage units is (see getStageDimensions)
+    const unconstrainedWidth = UNCONSTRAINED_NON_STAGE_WIDTH + FIXED_WIDTH;
     return (<MediaQuery minWidth={unconstrainedWidth}>{isUnconstrained => {
         const stageSize = resolveStageSize(stageSizeMode, isUnconstrained);
         // The sprite pane below the stage has fixed layouts per stage size; when the stage is dragged
@@ -233,8 +235,8 @@ const GUIComponent = props => {
                 className={styles.pageWrapper}
                 dir={isRtl ? 'rtl' : 'ltr'}
                 style={{
-                    minWidth: 1024 + Math.max(0, customStageSize.width - 480),
-                    minHeight: 640 + Math.max(0, customStageSize.height - 360)
+                    minWidth: 1024,
+                    minHeight: 640
                 }}
                 {...componentProps}
             >
@@ -359,21 +361,16 @@ const GUIComponent = props => {
                                     >
                                         <img
                                             draggable={false}
-                                            src={costumesIcon()}
+                                            src={targetIs3D ? modelTabIcon() : costumesIcon()}
                                         />
-                                        {targetIsStage ? (
-                                            <FormattedMessage
-                                                defaultMessage="Backdrops"
-                                                description="Button to get to the backdrops panel"
-                                                id="gui.gui.backdropsTab"
-                                            />
-                                        ) : (
-                                            <FormattedMessage
-                                                defaultMessage="Costumes"
-                                                description="Button to get to the costumes panel"
-                                                id="gui.gui.costumesTab"
-                                            />
-                                        )}
+                                        {targetIs3D ? '模型' : targetIsCamera ? '相機' : targetIsCanvas ? '畫布' :
+                                            targetIsStage ? '環境' : (
+                                                <FormattedMessage
+                                                    defaultMessage="Costumes"
+                                                    description="Button to get to the costumes panel"
+                                                    id="gui.gui.costumesTab"
+                                                />
+                                            )}
                                     </Tab>
                                     <Tab
                                         className={tabClassNames.tab}
@@ -420,9 +417,36 @@ const GUIComponent = props => {
                                     </Box>
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
-                                    {costumesTabVisible ? <CostumeTab
-                                        vm={vm}
-                                    /> : null}
+                                    {costumesTabVisible && targetIs3D ? <ModelTab vm={vm} /> : null}
+                                    {costumesTabVisible && targetIsCanvas ? (
+                                        <div className={styles.canvasTabNote}>
+                                            <p>{'畫布角色沒有造型：它顯示的是一張畫布。'}</p>
+                                            <p>
+                                                {'畫筆積木畫在這張畫布上（用「畫在 [畫布] 上」選擇要畫哪一張），' +
+                                                    '它可以像一般角色一樣移動、縮放、調整圖層和隱藏。'}
+                                            </p>
+                                            <p>
+                                                {'擴充和外部繪圖套件可以用 target.getCanvas() / getContext() ' +
+                                                    '拿到它的 Canvas2D 來畫；3D 角色的貼圖也可以選這張畫布。'}
+                                            </p>
+                                        </div>
+                                    ) : null}
+                                    {costumesTabVisible && targetIsCamera ? (
+                                        <div className={styles.canvasTabNote}>
+                                            <p>{'相機角色沒有模型：舞台顯示的是「目前的相機」看到的畫面。'}</p>
+                                            <p>
+                                                {'在右側面板設定位置、旋轉和視野，或在舞台上點選相機的視錐，' +
+                                                    '用 G / R 移動和旋轉。3D 動作積木也能移動相機。'}
+                                            </p>
+                                            <p>
+                                                {'在舞台上按數字鍵盤 0 從目前的相機看出去，' +
+                                                    'Ctrl + Alt + 數字鍵盤 0 把目前的相機移到編輯視角。'}
+                                            </p>
+                                        </div>
+                                    ) : null}
+                                    {costumesTabVisible && !targetIs3D && !targetIsCamera && !targetIsCanvas ? (
+                                        <CostumeTab vm={vm} />
+                                    ) : null}
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {filesTabVisible ? <FileTab vm={vm} /> : null}
@@ -533,6 +557,9 @@ GUIComponent.propTypes = {
     filesTabVisible: PropTypes.bool,
     stageDisplayWidth: PropTypes.number,
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),
+    targetIs3D: PropTypes.bool,
+    targetIsCamera: PropTypes.bool,
+    targetIsCanvas: PropTypes.bool,
     targetIsStage: PropTypes.bool,
     telemetryModalVisible: PropTypes.bool,
     theme: PropTypes.instanceOf(Theme),

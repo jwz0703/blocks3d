@@ -1,4 +1,5 @@
 const Cast = require('../util/cast');
+const DataPath = require('../util/data-path');
 
 class Scratch3DataBlocks {
     constructor (runtime) {
@@ -31,6 +32,7 @@ class Scratch3DataBlocks {
             data_lengthoflist: this.lengthOfList,
             data_listcontainsitem: this.listContainsItem,
             data_hidelist: this.hideList,
+            data_text: this.text,
             data_showlist: this.showList
         };
     }
@@ -38,7 +40,21 @@ class Scratch3DataBlocks {
     getVariable (args, util) {
         const variable = util.target.lookupOrCreateVariable(
             args.VARIABLE.id, args.VARIABLE.name);
+        // Monitors only notice new values, and paths change objects in place
+        if (util.thread.updateMonitor && typeof variable.value === 'object' && variable.value !== null) {
+            return Cast.toString(variable.value);
+        }
         return variable.value;
+    }
+
+    /**
+     * The text block: text that can have line breaks, with the values of ${path}s in it (see util/data-path.js).
+     * @param {object} args TEXT: the text
+     * @param {object} util
+     * @returns {string} text
+     */
+    text (args, util) {
+        return DataPath.fillTemplate(util.target, DataPath.interpreterLocals(util.thread), Cast.toString(args.TEXT));
     }
 
     setVariableTo (args, util) {
@@ -97,11 +113,12 @@ class Scratch3DataBlocks {
         // If block is running for monitors, return copy of list as an array if changed.
         if (util.thread.updateMonitor) {
             // Return original list value if up-to-date, which doesn't trigger monitor update.
-            if (list._monitorUpToDate) return list.value;
+            if (list._monitorUpToDate && Array.isArray(list.value)) return list.value;
             // If value changed, reset the flag and return a copy to trigger monitor update.
             // MonitorState only detects updates when the object changes.
             list._monitorUpToDate = true;
-            return list.value.slice();
+            // Paths can put something else than an array in a list
+            return Array.isArray(list.value) ? list.value.slice() : [list.value];
         }
 
         // Determine if the list is all single letters.

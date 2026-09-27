@@ -3,13 +3,13 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
-const b1 = stage.variables["FpLI$ida6)qR,q~y`1|*"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"a"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
-b0.value = (1 + 2);
+dataPath.set(target, null, b0, (1 + 2));
 yield* thread.procedures["Znon-warp recursion %s"](2);
-if ((("" + listGet(b1.value, b0.value)).toLowerCase() === "the only thing".toLowerCase())) {
+if ((toText(dataPath.itemOf(target, null, b1, dataPath.get(target, null, b0))).toLowerCase() === "the only thing".toLowerCase())) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -28,11 +28,11 @@ return "";
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 for (var a0 = 1; a0 > 0; a0--) {
 yield;
 }
-b0.value = "random";
+dataPath.set(target, null, b0, "random");
 retire(); return;
 }; })

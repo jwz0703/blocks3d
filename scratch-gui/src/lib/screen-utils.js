@@ -54,6 +54,21 @@ const resolveTargetPaneSize = (stageSize, displayWidth) => {
     return STAGE_DISPLAY_SIZES.small;
 };
 
+// Outside full screen the stage fits in a 4:3 box (height = width * 3 / 4)
+const STAGE_BOX_ASPECT_INVERSE = 3 / 4;
+
+/**
+ * @param {STAGE_DISPLAY_SIZES} stageSize - the current fully-resolved stage size.
+ * @param {?number} displayWidth - width chosen by dragging the stage edge, overrides stageSize when set.
+ * @returns {number} width of the 4:3 box the stage fits in outside full screen. The stage itself is narrower
+ * when it is taller than 4:3.
+ */
+const getStageBoxWidth = (stageSize, displayWidth) => {
+    if (displayWidth) return displayWidth;
+    const metadata = STAGE_DISPLAY_SCALE_METADATA[stageSize];
+    return metadata.width || FIXED_WIDTH * metadata.scale;
+};
+
 /**
  * Retrieve info used to determine the actual stage size based on the current GUI and browser state.
  * @param {STAGE_DISPLAY_SIZES} stageSize - the current fully-resolved stage size.
@@ -87,23 +102,17 @@ const getStageDimensions = (stageSize, customStageSize, isFullScreen, displayWid
         }
 
         stageDimensions.scale = stageDimensions.width / stageDimensions.widthDefault;
-    } else if (displayWidth) {
-        stageDimensions.width = displayWidth;
-        stageDimensions.scale = stageDimensions.width / stageDimensions.widthDefault;
-        stageDimensions.height = stageDimensions.scale * stageDimensions.heightDefault;
     } else {
-        const metadata = STAGE_DISPLAY_SCALE_METADATA[stageSize];
-        if (metadata.width) {
-            // Uses a fixed width.
-            stageDimensions.width = metadata.width;
-            stageDimensions.scale = stageDimensions.width / stageDimensions.widthDefault;
-            stageDimensions.height = stageDimensions.scale * stageDimensions.heightDefault;
-        } else {
-            // Uses a width relative to the current size.
-            stageDimensions.scale = metadata.scale;
-            stageDimensions.height = stageDimensions.scale * stageDimensions.heightDefault;
-            stageDimensions.width = stageDimensions.scale * stageDimensions.widthDefault;
-        }
+        // The stage fits in a 4:3 box, whatever its size in stage units is: a 1280x720 stage takes the same room as
+        // a 480x360 one would, and a tall (phone) stage doesn't push the rest of the editor down
+        const boxWidth = getStageBoxWidth(stageSize, displayWidth);
+        const boxHeight = boxWidth * STAGE_BOX_ASPECT_INVERSE;
+        stageDimensions.scale = Math.min(
+            boxWidth / stageDimensions.widthDefault,
+            boxHeight / stageDimensions.heightDefault
+        );
+        stageDimensions.width = stageDimensions.scale * stageDimensions.widthDefault;
+        stageDimensions.height = stageDimensions.scale * stageDimensions.heightDefault;
     }
 
     // Round off dimensions to prevent resampling/blurriness
@@ -112,6 +121,16 @@ const getStageDimensions = (stageSize, customStageSize, isFullScreen, displayWid
 
     return stageDimensions;
 };
+
+/**
+ * @returns {number} width / height of the room the stage has in full screen mode, which a stage that follows the
+ * shape of the screen fills
+ */
+const getFullScreenAspect = () => window.innerWidth / Math.max(1, (
+    window.innerHeight -
+    STAGE_DIMENSION_DEFAULTS.menuHeightAdjustment -
+    STAGE_DIMENSION_DEFAULTS.fullScreenSpacingBorderAdjustment
+));
 
 /**
  * @param {STAGE_DISPLAY_SIZES} stageSize - the current fully-resolved stage size.
@@ -151,6 +170,9 @@ const stageSizeToTransform = ({width, height, widthDefault, heightDefault}) => {
 };
 
 export {
+    STAGE_BOX_ASPECT_INVERSE,
+    getFullScreenAspect,
+    getStageBoxWidth,
     getStageDimensions,
     getMinWidth,
     resolveTargetPaneSize,

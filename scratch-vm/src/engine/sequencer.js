@@ -89,7 +89,8 @@ class Sequencer {
         while (this.runtime.threads.length > 0 &&
                numActiveThreads > 0 &&
                this.timer.timeElapsed() < WORK_TIME &&
-               (this.runtime.turboMode || !this.runtime.redrawRequested)) {
+               (this.runtime.turboMode || !this.runtime.redrawRequested ||
+                this.runtime.hasResumableWaitingThread())) {
             if (this.runtime.profiler !== null) {
                 if (stepThreadsInnerProfilerId === -1) {
                     stepThreadsInnerProfilerId = this.runtime.profiler.idByName(stepThreadsInnerProfilerFrame);
@@ -110,6 +111,8 @@ class Sequencer {
                     stoppedThread = true;
                     continue;
                 }
+                // Scripts of the per-frame phases only run in their phase, see Runtime._runFramePhase()
+                if (activeThread.framePhase) continue;
                 if (activeThread.status === Thread.STATUS_YIELD_TICK &&
                     !ranFirstTick) {
                     // Clear single-tick yield from the last call of `stepThreads`.

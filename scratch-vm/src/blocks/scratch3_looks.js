@@ -157,7 +157,12 @@ class Scratch3LooksBlocks {
     _positionBubble (target) {
         if (!target.visible) return;
         const bubbleState = this._getBubbleState(target);
-        const [bubbleWidth, bubbleHeight] = this.runtime.renderer.getCurrentSkinSize(bubbleState.drawableId);
+        // Bubbles grow with the reference size of the screen, so that they look the same on bigger stages
+        const uiScale = this.runtime.getUIScale();
+        this.runtime.renderer.updateDrawableScale(bubbleState.drawableId, [100 * uiScale, 100 * uiScale]);
+        const [skinWidth, skinHeight] = this.runtime.renderer.getCurrentSkinSize(bubbleState.drawableId);
+        const bubbleWidth = skinWidth * uiScale;
+        const bubbleHeight = skinHeight * uiScale;
         let targetBounds;
         try {
             targetBounds = target.getBoundsForBubble();
@@ -256,7 +261,8 @@ class Scratch3LooksBlocks {
         }
 
         // Limit the length of the string.
-        text = String(text).substr(0, Scratch3LooksBlocks.SAY_BUBBLE_LIMIT);
+        // Objects and arrays (see util/data-path.js) are shown as JSON
+        text = Cast.toString(text).substr(0, Scratch3LooksBlocks.SAY_BUBBLE_LIMIT);
 
         return text;
     }

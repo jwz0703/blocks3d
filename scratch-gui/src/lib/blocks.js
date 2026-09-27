@@ -116,7 +116,11 @@ export default function (vm) {
         return [['', '']];
     };
 
-    const spriteMenu = function () {
+    /**
+     * @param {function(Target): boolean} [include] which sprites to list, besides the editing target
+     * @returns {Array<Array<string>>} menu items of sprites
+     */
+    const spriteMenu = function (include) {
         const sprites = [];
         for (const targetId in vm.runtime.targets) {
             if (!Object.prototype.hasOwnProperty.call(vm.runtime.targets, targetId)) continue;
@@ -125,12 +129,20 @@ export default function (vm) {
                     if (vm.runtime.targets[targetId] === vm.editingTarget) {
                         continue;
                     }
+                    if (include && !include(vm.runtime.targets[targetId])) continue;
                     sprites.push([vm.runtime.targets[targetId].sprite.name, vm.runtime.targets[targetId].sprite.name]);
                 }
             }
         }
         return sprites;
     };
+
+    const editingKind = () => vm.getTargetKind(vm.editingTarget);
+    // Where to go, what to point at or measure the distance to: 2D sprites can use 3D sprites (where they are drawn
+    // on the stage), but 3D sprites can't use 2D sprites, which aren't anywhere in the 3D scene.
+    const reachableSpriteMenu = () => spriteMenu(target => editingKind() === '2d' || !!target.is3D);
+    // 2D and 3D sprites never touch each other
+    const sameKindSpriteMenu = () => spriteMenu(target => vm.getTargetKind(target) === editingKind());
 
     const cloneMenu = function () {
         if (vm.editingTarget && vm.editingTarget.isStage) {
@@ -181,7 +193,7 @@ export default function (vm) {
     ScratchBlocks.Blocks.motion_pointtowards_menu.init = function () {
         const random = ScratchBlocks.ScratchMsgs.translate('MOTION_POINTTOWARDS_RANDOM', 'random direction');
         const mouse = ScratchBlocks.ScratchMsgs.translate('MOTION_POINTTOWARDS_POINTER', 'mouse-pointer');
-        const json = jsonForMenuBlock('TOWARDS', spriteMenu, motionColors, [
+        const json = jsonForMenuBlock('TOWARDS', reachableSpriteMenu, motionColors, [
             [mouse, '_mouse_'],
             [random, '_random_']
         ]);
@@ -191,7 +203,7 @@ export default function (vm) {
     ScratchBlocks.Blocks.motion_goto_menu.init = function () {
         const random = ScratchBlocks.ScratchMsgs.translate('MOTION_GOTO_RANDOM', 'random position');
         const mouse = ScratchBlocks.ScratchMsgs.translate('MOTION_GOTO_POINTER', 'mouse-pointer');
-        const json = jsonForMenuBlock('TO', spriteMenu, motionColors, [
+        const json = jsonForMenuBlock('TO', reachableSpriteMenu, motionColors, [
             [random, '_random_'],
             [mouse, '_mouse_']
         ]);
@@ -201,7 +213,7 @@ export default function (vm) {
     ScratchBlocks.Blocks.motion_glideto_menu.init = function () {
         const random = ScratchBlocks.ScratchMsgs.translate('MOTION_GLIDETO_RANDOM', 'random position');
         const mouse = ScratchBlocks.ScratchMsgs.translate('MOTION_GLIDETO_POINTER', 'mouse-pointer');
-        const json = jsonForMenuBlock('TO', spriteMenu, motionColors, [
+        const json = jsonForMenuBlock('TO', reachableSpriteMenu, motionColors, [
             [random, '_random_'],
             [mouse, '_mouse_']
         ]);
@@ -214,6 +226,21 @@ export default function (vm) {
             [stage, '_stage_']
         ]);
         this.jsonInit(json);
+    };
+
+    // What the "[property] of [sprite]" block shows for the properties of 3D sprites
+    const attributeNames3D = {
+        'x position': ScratchBlocks.Msg.SENSING_OF_XPOSITION,
+        'y position': ScratchBlocks.Msg.SENSING_OF_YPOSITION,
+        'z position': 'z 座標',
+        'yaw': 'yaw',
+        'pitch': 'pitch',
+        'roll': 'roll',
+        'model #': '模型編號',
+        'model name': '模型名稱',
+        'scale': '縮放',
+        'opacity': '不透明度',
+        'fov': '視野'
     };
 
     ScratchBlocks.Blocks.sensing_of.init = function () {
@@ -289,6 +316,12 @@ export default function (vm) {
                     sort(spriteVariableOptions);
                 }
                 const spriteVariableMenuItems = spriteVariableOptions.map(variable => [variable, variable]);
+                const attributes = target && vm.getSpriteAttributes(vm.getTargetKind(target));
+                if (attributes) {
+                    return attributes
+                        .map(attribute => [attributeNames3D[attribute] || attribute, attribute])
+                        .concat(spriteVariableMenuItems);
+                }
                 return spriteOptions.concat(spriteVariableMenuItems);
             }
             return [['', '']];
@@ -300,7 +333,7 @@ export default function (vm) {
 
     ScratchBlocks.Blocks.sensing_distancetomenu.init = function () {
         const mouse = ScratchBlocks.ScratchMsgs.translate('SENSING_DISTANCETO_POINTER', 'mouse-pointer');
-        const json = jsonForMenuBlock('DISTANCETOMENU', spriteMenu, sensingColors, [
+        const json = jsonForMenuBlock('DISTANCETOMENU', reachableSpriteMenu, sensingColors, [
             [mouse, '_mouse_']
         ]);
         this.jsonInit(json);
@@ -309,7 +342,7 @@ export default function (vm) {
     ScratchBlocks.Blocks.sensing_touchingobjectmenu.init = function () {
         const mouse = ScratchBlocks.ScratchMsgs.translate('SENSING_TOUCHINGOBJECT_POINTER', 'mouse-pointer');
         const edge = ScratchBlocks.ScratchMsgs.translate('SENSING_TOUCHINGOBJECT_EDGE', 'edge');
-        const json = jsonForMenuBlock('TOUCHINGOBJECTMENU', spriteMenu, sensingColors, [
+        const json = jsonForMenuBlock('TOUCHINGOBJECTMENU', sameKindSpriteMenu, sensingColors, [
             [mouse, '_mouse_'],
             [edge, '_edge_']
         ]);
@@ -762,6 +795,430 @@ export default function (vm) {
         patchedCreateMarkerBlock.twFold = true;
         ScratchBlocks.InsertionMarkerManager.prototype.createMarkerBlock_ = patchedCreateMarkerBlock;
     }
+
+    // Multi-line text field of the text block (data_text). Enter starts a new line; Ctrl/⌘+Enter, Tab or clicking
+    // somewhere else finishes. Each line is a <tspan>, and the field grows with the text.
+    const TEXTAREA_LINE_HEIGHT = 20;
+    const TEXTAREA_PADDING_Y = 6;
+    const TEXTAREA_PADDING_X = 8;
+    const TEXTAREA_MAX_LINE_LENGTH = 80;
+    const TEXTAREA_FONT = ['12pt', '"Helvetica Neue", Helvetica, sans-serif', '500'];
+    const TEXTAREA_TEXT_COLOUR = '#575E75';
+    const FieldTextArea = function (text) {
+        ScratchBlocks.FieldTextInput.call(this, text);
+    };
+    FieldTextArea.prototype = Object.create(ScratchBlocks.FieldTextInput.prototype);
+    FieldTextArea.prototype.constructor = FieldTextArea;
+    FieldTextArea.fromJson = options => new FieldTextArea(options.text || '');
+    FieldTextArea.prototype.init = function () {
+        if (this.fieldGroup_) return;
+        ScratchBlocks.FieldTextInput.prototype.init.call(this);
+        // A white box with dark text, like the text fields of other blocks
+        this.textElement_.setAttribute('class', 'blocklyText');
+        this.textElement_.setAttribute('text-anchor', 'start');
+        this.textElement_.style.fill = TEXTAREA_TEXT_COLOUR;
+        if (this.box_) {
+            this.box_.setAttribute('fill', '#FFFFFF');
+            this.box_.setAttribute('rx', 4);
+            this.box_.setAttribute('ry', 4);
+        }
+        this.render_();
+    };
+    FieldTextArea.prototype.lines_ = function () {
+        return (this.text_ || '').split('\n');
+    };
+    FieldTextArea.prototype.render_ = function () {
+        const lines = this.lines_();
+        const height = Math.max(ScratchBlocks.BlockSvg.FIELD_HEIGHT,
+            (lines.length * TEXTAREA_LINE_HEIGHT) + (2 * TEXTAREA_PADDING_Y));
+        let width = 0;
+        const element = this.textElement_;
+        if (element) {
+            while (element.firstChild) element.removeChild(element.firstChild);
+            const top = (height - (lines.length * TEXTAREA_LINE_HEIGHT)) / 2;
+            lines.forEach((line, i) => {
+                if (line.length > TEXTAREA_MAX_LINE_LENGTH) {
+                    line = `${line.substring(0, TEXTAREA_MAX_LINE_LENGTH - 1)}…`;
+                }
+                // Keep spaces, and give empty lines some width
+                const shown = line.replace(/\s/g, ScratchBlocks.Field.NBSP) || ScratchBlocks.Field.NBSP;
+                const tspan = ScratchBlocks.utils.createSvgElement('tspan', {
+                    x: TEXTAREA_PADDING_X,
+                    y: top + (TEXTAREA_LINE_HEIGHT * (i + 0.5))
+                }, element);
+                tspan.textContent = shown;
+                width = Math.max(width, ScratchBlocks.scratchBlocksUtils.measureText(...TEXTAREA_FONT, shown));
+            });
+        }
+        this.size_.width = Math.max(ScratchBlocks.BlockSvg.FIELD_WIDTH, width + (2 * TEXTAREA_PADDING_X));
+        this.size_.height = height;
+        if (this.box_) {
+            this.box_.setAttribute('width', this.size_.width);
+            this.box_.setAttribute('height', this.size_.height);
+        }
+    };
+    FieldTextArea.prototype.showEditor_ = function () {
+        this.workspace_ = this.sourceBlock_.workspace;
+        ScratchBlocks.WidgetDiv.show(this, this.sourceBlock_.RTL, this.widgetDispose_(),
+            this.widgetDisposeAnimationFinished_(), ScratchBlocks.FieldTextInput.ANIMATION_TIME);
+        const div = ScratchBlocks.WidgetDiv.DIV;
+        div.className += ' fieldTextInput';
+        const textarea = document.createElement('textarea');
+        textarea.className = 'blocklyHtmlInput';
+        textarea.setAttribute('spellcheck', 'false');
+        Object.assign(textarea.style, {
+            resize: 'none',
+            overflow: 'hidden',
+            textAlign: 'left',
+            whiteSpace: 'pre',
+            fontSize: TEXTAREA_FONT[0],
+            lineHeight: `${TEXTAREA_LINE_HEIGHT}px`,
+            padding: `${TEXTAREA_PADDING_Y}px ${TEXTAREA_PADDING_X}px`,
+            color: TEXTAREA_TEXT_COLOUR
+        });
+        ScratchBlocks.FieldTextInput.htmlInput_ = textarea;
+        div.appendChild(textarea);
+        textarea.value = textarea.defaultValue = this.text_;
+        textarea.oldValue_ = null;
+        this.validate_();
+        this.resizeEditor_();
+        textarea.focus();
+        textarea.select();
+        this.bindEvents_(textarea, false);
+        div.style.transition = `box-shadow ${ScratchBlocks.FieldTextInput.ANIMATION_TIME}s`;
+        div.style.boxShadow = `0px 0px 0px 4px ${ScratchBlocks.Colours.fieldShadow}`;
+    };
+    FieldTextArea.prototype.onHtmlInputKeyDown_ = function (e) {
+        const textarea = ScratchBlocks.FieldTextInput.htmlInput_;
+        if (e.keyCode === 13) {
+            // Plain Enter is a new line
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                ScratchBlocks.WidgetDiv.hide();
+            }
+        } else if (e.keyCode === 27) {
+            textarea.value = textarea.defaultValue;
+            ScratchBlocks.WidgetDiv.hide();
+        } else if (e.keyCode === 9) {
+            e.preventDefault();
+            ScratchBlocks.WidgetDiv.hide();
+        }
+    };
+    FieldTextArea.prototype.resizeEditor_ = function () {
+        const scale = this.sourceBlock_.workspace.scale;
+        const div = ScratchBlocks.WidgetDiv.DIV;
+        const size = this.getSize();
+        const lines = (ScratchBlocks.FieldTextInput.htmlInput_ || {value: ''}).value.split('\n');
+        const width = Math.max(size.width, ScratchBlocks.BlockSvg.FIELD_WIDTH_MIN_EDIT) + TEXTAREA_PADDING_X;
+        const height = Math.max(size.height, (lines.length * TEXTAREA_LINE_HEIGHT) + (2 * TEXTAREA_PADDING_Y));
+        div.style.width = `${width + 1}px`;
+        div.style.height = `${height + 1}px`;
+        div.style.transform = `scale(${scale})`;
+        div.style.borderRadius = '4px';
+        div.style.borderColor = this.sourceBlock_.getColourTertiary();
+        const xy = this.getAbsoluteXY_();
+        div.style.left = `${xy.x - (scale / 2)}px`;
+        div.style.top = `${xy.y - (scale / 2)}px`;
+    };
+    ScratchBlocks.Field.register('field_textarea', FieldTextArea);
+
+    // The text block: text that can have line breaks, with ${path} filled in (see scratch-vm util/data-path.js)
+    ScratchBlocks.Blocks.data_text = {
+        init: function () {
+            this.jsonInit({
+                message0: '%1',
+                args0: [
+                    {
+                        type: 'field_textarea',
+                        name: 'TEXT',
+                        text: ''
+                    }
+                ],
+                category: ScratchBlocks.Categories.data,
+                extensions: ['colours_data', 'output_string']
+            });
+        }
+    };
+
+    // Clones have ids: "create clone of [sprite] with id ()" (empty: numbered 1, 2, 3...), and "when I start as a
+    // clone (id)", whose id can be dragged out like a custom block parameter
+    ScratchBlocks.Blocks.control_create_clone_of = {
+        init: function () {
+            this.jsonInit({
+                message0: '建立 %1 的分身 id = %2',
+                args0: [
+                    {
+                        type: 'input_value',
+                        name: 'CLONE_OPTION'
+                    },
+                    {
+                        type: 'input_value',
+                        name: 'ID'
+                    }
+                ],
+                category: ScratchBlocks.Categories.control,
+                extensions: ['colours_control', 'shape_statement']
+            });
+        }
+    };
+    ScratchBlocks.Blocks.control_start_as_clone = {
+        init: function () {
+            this.jsonInit({
+                message0: '當分身產生 %1',
+                args0: [
+                    {
+                        type: 'input_value',
+                        name: 'ID'
+                    }
+                ],
+                category: ScratchBlocks.Categories.control,
+                extensions: ['colours_control', 'shape_hat']
+            });
+        }
+    };
+    ScratchBlocks.Blocks.control_start_as_clone_id = {
+        init: function () {
+            this.jsonInit({
+                message0: '%1',
+                args0: [
+                    {
+                        type: 'field_label_serializable',
+                        name: 'VALUE',
+                        text: 'id'
+                    }
+                ],
+                category: ScratchBlocks.Categories.control,
+                extensions: ['colours_control', 'output_string']
+            });
+        }
+    };
+
+    // "when every frame [update / after update] (seconds)" (ROADMAP.md 6.6): the runtime runs these scripts in
+    // order in every frame, see Runtime._runFramePhase in scratch-vm. The seconds since the last frame can be
+    // dragged out, like in "for each frame".
+    ScratchBlocks.Blocks.control_whenframe = {
+        init: function () {
+            this.jsonInit({
+                message0: '當每幀 %1 %2',
+                args0: [
+                    {
+                        type: 'field_dropdown',
+                        name: 'PHASE',
+                        options: [
+                            ['更新', 'update'],
+                            ['更新後', 'lateupdate']
+                        ]
+                    },
+                    {
+                        type: 'input_value',
+                        name: 'DT'
+                    }
+                ],
+                category: ScratchBlocks.Categories.control,
+                extensions: ['colours_control', 'shape_hat']
+            });
+        }
+    };
+
+    // Calling a custom block of another sprite right away, like Snap!'s "tell" (ROADMAP.md 6.6, see
+    // scratch-vm/src/engine/cross-call.js). The function menu lists the other sprite's custom blocks by the id of
+    // their prototype block, which stays the same when they are renamed; their arguments follow, like on a custom
+    // block, named by argument id.
+    const ProcedureUtils = ScratchBlocks.ScratchBlocks.ProcedureUtils;
+    const crossCallTarget = sprite => {
+        if (sprite === '_stage_') return vm.runtime.getTargetForStage();
+        if (sprite === '_myself_') return vm.editingTarget;
+        return vm.runtime.getSpriteTargetByName(sprite);
+    };
+    const parseJSON = (text, fallback) => {
+        try {
+            const value = JSON.parse(text);
+            return Array.isArray(value) ? value : fallback;
+        } catch (e) {
+            return fallback;
+        }
+    };
+    /**
+     * @param {?Target} target a sprite or the stage
+     * @returns {Array<{id: string, proccode: string, argumentIds: string[], argumentNames: string[]}>} the custom
+     * blocks of the target
+     */
+    const prototypesOf = target => {
+        if (!target) return [];
+        const blocks = target.blocks._blocks;
+        return Object.values(blocks)
+            .filter(block => block.opcode === 'procedures_prototype' && block.mutation &&
+                blocks[block.parent] && blocks[block.parent].opcode === 'procedures_definition')
+            .map(block => ({
+                id: block.id,
+                proccode: block.mutation.proccode,
+                argumentIds: parseJSON(block.mutation.argumentids, []),
+                argumentNames: parseJSON(block.mutation.argumentnames, [])
+            }))
+            .sort((a, b) => collator.compare(a.proccode, b.proccode));
+    };
+    const procedureLabel = proccode => proccode
+        .replace(/(^|[^\\])%[snb]/g, '$1( )')
+        .replace(/\\%/g, '%');
+    const crossCallSpriteOptions = () => {
+        const sprites = vm.runtime.targets
+            .filter(target => target.isOriginal && !target.isStage)
+            .map(target => target.getName())
+            .sort(collator.compare)
+            .map(name => [name, name]);
+        return [['我自己', '_myself_'], ['舞台', '_stage_'], ...sprites];
+    };
+    const crossCallBlock = (type, tokens, output) => {
+        ScratchBlocks.Blocks[type] = {
+            init: function () {
+                this.sprite_ = '_myself_';
+                this.procCode_ = '';
+                this.argumentIds_ = [];
+                this.prototypeId_ = '';
+                // Like custom blocks: only blocks made from the palette make their own shadows; loaded blocks have
+                // them in their XML
+                this.generateShadows_ = false;
+                this.jsonInit({
+                    category: ScratchBlocks.Categories.more,
+                    extensions: ['colours_more', output ? 'output_string' : 'shape_statement']
+                });
+                this.updateDisplay_();
+            },
+            // The sprite is in the mutation too, since Blockly reads the mutation before the fields
+            mutationToDom: function () {
+                const container = document.createElement('mutation');
+                container.setAttribute('sprite', this.sprite_);
+                container.setAttribute('proccode', this.procCode_);
+                container.setAttribute('argumentids', JSON.stringify(this.argumentIds_));
+                container.setAttribute('prototypeid', this.prototypeId_);
+                return container;
+            },
+            domToMutation: function (xmlElement) {
+                this.sprite_ = xmlElement.getAttribute('sprite') || '_myself_';
+                this.procCode_ = xmlElement.getAttribute('proccode') || '';
+                this.argumentIds_ = parseJSON(xmlElement.getAttribute('argumentids'), []);
+                this.prototypeId_ = xmlElement.getAttribute('prototypeid') || '';
+                this.generateShadows_ = xmlElement.getAttribute('generateshadows') === 'true';
+                this.updateDisplay_();
+            },
+            /**
+             * @returns {?object} the custom block this block calls, as the other sprite has it now
+             */
+            getPrototype_: function () {
+                const prototypes = prototypesOf(crossCallTarget(this.sprite_));
+                return prototypes.find(prototype => prototype.id === this.prototypeId_) || null;
+            },
+            functionOptions_: function () {
+                const options = prototypesOf(crossCallTarget(this.sprite_))
+                    .map(prototype => [procedureLabel(prototype.proccode), prototype.id]);
+                if (this.prototypeId_ && !options.some(option => option[1] === this.prototypeId_)) {
+                    // A custom block that isn't there (any more) still shows its name
+                    options.push([procedureLabel(this.procCode_) || '?', this.prototypeId_]);
+                }
+                return options.length ? options : [['（沒有自訂積木）', '']];
+            },
+            updateDisplay_: function () {
+                const wasRendered = this.rendered;
+                this.rendered = false;
+                // Follows renames of the custom block and changes to its arguments
+                const prototype = this.getPrototype_();
+                let argumentNames = [];
+                if (prototype) {
+                    this.procCode_ = prototype.proccode;
+                    this.argumentIds_ = prototype.argumentIds;
+                    argumentNames = prototype.argumentNames;
+                }
+                const types = (this.procCode_.match(/(^|[^\\])%[snb]/g) || []).map(match => match.slice(-1));
+
+                const connectionMap = ProcedureUtils.disconnectOldBlocks_.call(this);
+                ProcedureUtils.removeAllInputs_.call(this);
+                for (const token of tokens) {
+                    if (token === 'SPRITE' || token === 'FUNCTION') {
+                        const field = token === 'SPRITE' ?
+                            new ScratchBlocks.FieldDropdown(crossCallSpriteOptions) :
+                            new ScratchBlocks.FieldDropdown(() => this.functionOptions_());
+                        this.appendDummyInput(`${token}_INPUT`).appendField(field, token);
+                        // Not a change the VM needs to hear about
+                        ScratchBlocks.Events.disable();
+                        try {
+                            field.setValue(token === 'SPRITE' ? this.sprite_ : this.prototypeId_);
+                        } finally {
+                            ScratchBlocks.Events.enable();
+                        }
+                    } else if (token === 'ID') {
+                        const input = this.appendValueInput('ID');
+                        ProcedureUtils.populateArgumentOnCaller_.call(this, 's', 0, connectionMap, 'ID', input);
+                    } else {
+                        this.appendDummyInput().appendField(token);
+                    }
+                }
+                this.argumentIds_.forEach((id, index) => {
+                    const argumentType = types[index] || 's';
+                    const name = argumentNames[index];
+                    if (name) this.appendDummyInput().appendField(`${name}:`);
+                    const input = this.appendValueInput(id);
+                    if (argumentType === 'b') input.setCheck('Boolean');
+                    ProcedureUtils.populateArgumentOnCaller_.call(this, argumentType, index, connectionMap, id,
+                        input);
+                });
+                ProcedureUtils.deleteShadows_.call(this, connectionMap);
+                this.setInputsInline(true);
+
+                this.rendered = wasRendered;
+                if (wasRendered && !this.isInsertionMarker()) {
+                    this.initSvg();
+                    this.render();
+                }
+            },
+            /**
+             * Call another custom block: change the mutation and the arguments, and tell the VM.
+             * @param {string} sprite the sprite's name, '_myself_' or '_stage_'
+             * @param {string} prototypeId id of the custom block's prototype block
+             */
+            applyPrototype_: function (sprite, prototypeId) {
+                const oldMutation = ScratchBlocks.Xml.domToText(this.mutationToDom());
+                this.sprite_ = sprite;
+                this.prototypeId_ = prototypeId;
+                const prototype = this.getPrototype_();
+                this.procCode_ = prototype ? prototype.proccode : '';
+                this.argumentIds_ = prototype ? prototype.argumentIds : [];
+                // New arguments get shadows, and the VM hears about them
+                this.generateShadows_ = true;
+                this.updateDisplay_();
+                const newMutation = ScratchBlocks.Xml.domToText(this.mutationToDom());
+                if (oldMutation !== newMutation && ScratchBlocks.Events.isEnabled()) {
+                    ScratchBlocks.Events.fire(new ScratchBlocks.Events.BlockChange(
+                        this, 'mutation', null, oldMutation, newMutation));
+                }
+            },
+            onchange: function (event) {
+                if (event.type !== ScratchBlocks.Events.CHANGE || event.blockId !== this.id ||
+                    event.element !== 'field') {
+                    return;
+                }
+                if (event.name === 'SPRITE' && event.newValue !== this.sprite_) {
+                    // Another sprite: its first custom block
+                    const prototypes = prototypesOf(crossCallTarget(event.newValue));
+                    const first = prototypes.length ? prototypes[0].id : '';
+                    const oldPrototypeId = this.prototypeId_;
+                    this.applyPrototype_(event.newValue, first);
+                    // The menu was made again with the new value, so the VM is told here
+                    if (oldPrototypeId !== first && ScratchBlocks.Events.isEnabled()) {
+                        ScratchBlocks.Events.fire(new ScratchBlocks.Events.BlockChange(
+                            this, 'field', 'FUNCTION', oldPrototypeId, first));
+                    }
+                } else if (event.name === 'FUNCTION' && event.newValue !== this.prototypeId_) {
+                    this.applyPrototype_(this.sprite_, event.newValue);
+                }
+            },
+            attachShadow_: ProcedureUtils.attachShadow_,
+            buildShadowDom_: ProcedureUtils.buildShadowDom_
+        };
+    };
+    crossCallBlock('procedures_callsprite', ['呼叫', 'SPRITE', '的', 'FUNCTION'], false);
+    crossCallBlock('procedures_callsprite_each', ['對每個', 'SPRITE', '呼叫', 'FUNCTION'], false);
+    crossCallBlock('procedures_callsprite_id', ['對 id 為', 'ID', '的', 'SPRITE', '呼叫', 'FUNCTION'], false);
+    crossCallBlock('procedures_callsprite_reporter', ['從', 'SPRITE', '呼叫', 'FUNCTION'], true);
 
     // Extension reporters used as ArgumentType.PARAMETER behave like custom block
     // parameters: they render as normal reporters and dragging one makes a copy.

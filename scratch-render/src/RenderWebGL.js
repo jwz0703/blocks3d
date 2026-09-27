@@ -247,7 +247,20 @@ class RenderWebGL extends EventEmitter {
         // tw: track id of pen skin
         this._penSkinId = null;
 
-        this.useHighQualityRender = false;
+        // Blocks3D: always drawn at the resolution of the screen (ROADMAP.md 7.5); the render scale lowers it
+        this.useHighQualityRender = true;
+
+        /**
+         * Resolution of the canvas compared to the screen, 0.25 to 1. Lower is faster (e.g. on phones).
+         * @type {number}
+         */
+        this._renderScale = 1;
+
+        /**
+         * The last size given to resize(), in CSS pixels
+         * @type {?Array<number>}
+         */
+        this._displaySize = null;
 
         this.offscreenTouching = false;
 
@@ -423,7 +436,8 @@ class RenderWebGL extends EventEmitter {
      */
     resize (pixelsWide, pixelsTall) {
         const {canvas} = this._gl;
-        const pixelRatio = window.devicePixelRatio || 1;
+        this._displaySize = [pixelsWide, pixelsTall];
+        const pixelRatio = this._getPixelRatio();
         const newWidth = Math.round(pixelsWide * pixelRatio);
         const newHeight = Math.round(pixelsTall * pixelRatio);
 
@@ -543,6 +557,24 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
+     * @returns {number} canvas pixels per CSS pixel
+     */
+    _getPixelRatio () {
+        return (window.devicePixelRatio || 1) * this._renderScale;
+    }
+
+    /**
+     * Change the resolution of the canvas compared to the screen.
+     * @param {number} scale 0.25 to 1
+     */
+    setRenderScale (scale) {
+        scale = Math.max(0.25, Math.min(1, Number(scale) || 1));
+        if (scale === this._renderScale) return;
+        this._renderScale = scale;
+        if (this._displaySize) this.resize(this._displaySize[0], this._displaySize[1]);
+    }
+
+    /**
      * @param {HTMLElement} element HTML element
      */
     removeOverlay (element) {
@@ -555,8 +587,8 @@ class RenderWebGL extends EventEmitter {
 
     _updateOverlays () {
         const [nativeWidth, nativeHeight] = this._nativeSize;
-        const dpiIndependentWidth = this.canvas.width / window.devicePixelRatio;
-        const dpiIndependentHeight = this.canvas.height / window.devicePixelRatio;
+        const dpiIndependentWidth = this.canvas.width / this._getPixelRatio();
+        const dpiIndependentHeight = this.canvas.height / this._getPixelRatio();
 
         this.overlayContainer.style.width = `${dpiIndependentWidth}px`;
         this.overlayContainer.style.height = `${dpiIndependentHeight}px`;

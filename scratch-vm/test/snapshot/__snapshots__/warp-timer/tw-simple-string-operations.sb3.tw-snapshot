@@ -3,11 +3,11 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["PJl9-2GypE.OstQk*B_*"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"result"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
 yield* thread.procedures["Wa"]();
-if ((("" + b0.value).toLowerCase() === "babab".toLowerCase())) {
+if ((toText(dataPath.get(target, null, b0)).toLowerCase() === "babab".toLowerCase())) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -16,20 +16,20 @@ retire(); return;
 
 // Sprite1 Wa
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["uEt-Ix{%|r3`}-W%+kdm"];
-const b1 = stage.variables["PJl9-2GypE.OstQk*B_*"];
-const b2 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"input"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"result"}]});
+const b2 = dataPath.makePath({"scope":"global","steps":[{"key":"index"}]});
 return function* genXYZ_a () {
-b0.value = "ababa";
-b1.value = "";
-b2.value = 1;
-for (var a0 = b0.value.length; a0 > 0; a0--) {
-if ((((("" + b0.value))[((+b2.value) | 0) - 1] || "").toLowerCase() === "a".toLowerCase())) {
-b1.value = (("" + b1.value) + "b");
+dataPath.set(target, null, b0, "ababa");
+dataPath.set(target, null, b1, "");
+dataPath.set(target, null, b2, 1);
+for (var a0 = toText(dataPath.get(target, null, b0)).length; a0 > 0; a0--) {
+if ((((toText(dataPath.get(target, null, b0)))[((+dataPath.get(target, null, b2)) | 0) - 1] || "").toLowerCase() === "a".toLowerCase())) {
+dataPath.set(target, null, b1, (toText(dataPath.get(target, null, b1)) + "b"));
 } else {
-b1.value = (("" + b1.value) + "a");
+dataPath.set(target, null, b1, (toText(dataPath.get(target, null, b1)) + "a"));
 }
-b2.value = (toNotNaN(+b2.value) + 1);
+dataPath.change(target, null, b2, 1);
 if (isStuck()) yield;
 }
 return "";

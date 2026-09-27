@@ -3,18 +3,17 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = target.variables["gTtSj;o_E;Snkn620KF."];
-const b1 = target.variables["zShM`!CD?d_|Z,]5X}N6"];
+const b0 = dataPath.makePath({"scope":"self","steps":[{"key":"test"}]});
+const b1 = dataPath.makePath({"scope":"self","steps":[{"key":"list"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 2", target);
-b0.value = 2;
-if ((b0.value === 2)) {
+dataPath.set(target, null, b0, 2);
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 2)) {
 runtime.ext_scratch3_looks._say("pass variable", target);
 }
-b1.value = [];
-b1.value.push(3);
-b1._monitorUpToDate = false;
-if ((toNotNaN(+(b1.value[1 - 1] ?? "")) === 3)) {
+dataPath.clear(target, null, b1);
+dataPath.addItem(target, null, b1, 3);
+if ((toNotNaN(+dataPath.itemOf(target, null, b1, 1)) === 3)) {
 runtime.ext_scratch3_looks._say("pass list", target);
 }
 runtime.ext_scratch3_looks._say("end", target);

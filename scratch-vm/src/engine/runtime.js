@@ -22,6 +22,9 @@ const ScratchLinkWebSocket = require('../util/scratch-link-websocket');
 const FontManager = require('./tw-font-manager');
 const FileManager = require('./tw-file-manager');
 const Scene3D = require('./scene-3d');
+const CrossCall = require('./cross-call');
+const SpatialAudioEffect = require('./spatial-audio-effect');
+const CanvasSprites = require('./canvas-sprites');
 const fetchWithTimeout = require('../util/fetch-with-timeout');
 const platform = require('./tw-platform.js');
 const safeStringify = require('../util/tw-safe-stringify.js');
@@ -54,6 +57,14 @@ const defaultBlockPackages = {
 const interpolate = require('./tw-interpolate');
 const FrameLoop = require('./tw-frame-loop');
 const MonitorRecord = require('./monitor-record.js');
+const BlockSupport = require('./block-support');
+const {makeReplacements} = require('../extensions/tw_3d/replacements');
+const Screen = require('./screen');
+
+// The hat of the per-frame phases, and its phases, see _runFramePhase()
+const FRAME_HAT = 'control_whenframe';
+const FRAME_PHASE_UPDATE = 'update';
+const FRAME_PHASE_LATE_UPDATE = 'lateupdate';
 
 const defaultExtensionColors = ['#0FBD8C', '#0DA57A', '#0B8E69'];
 
@@ -263,6 +274,15 @@ class Runtime extends EventEmitter {
         this._primitives = {};
 
         /**
+         * Block functions wrapped to follow block-support.js, by opcode.
+         * @type {Object.<string, {primitive: Function, wrapped: Function}>}
+         * @private
+         */
+        this._kindPrimitives = {};
+        /** 3D versions of 2D blocks */
+        this._replacements3D = makeReplacements(this);
+
+        /**
          * Map to look up all block information by extended opcode.
          * @type {Array.<CategoryInfo>}
          * @private
@@ -275,7 +295,9 @@ class Runtime extends EventEmitter {
          * @type {Set.<string>}
          * @private
          */
-        this._parameterReporters = new Set(['control_foreachframe_deltatime', 'control_for_range_index']);
+        this._parameterReporters = new Set([
+            'control_foreachframe_deltatime', 'control_for_range_index', 'control_start_as_clone_id'
+        ]);
 
         /**
          * Number of frames stepped so far. Used by "for each frame" loops.
@@ -315,6 +337,33 @@ class Runtime extends EventEmitter {
          * @type {Array<Thread>}
          */
         this._lastStepDoneThreads = null;
+
+        /**
+         * Seconds since the last frame, see _step()
+         * @type {number}
+         */
+        this.frameDelta = 0;
+        this._lastFrameTime = null;
+
+        /**
+         * True from the green flag until the project stops: only then do "when every frame" scripts run
+         * @type {boolean}
+         */
+        this.frameHatsEnabled = false;
+
+        /**
+         * True while the project is paused (the pause button). Scripts are paused by the pause addon; the parts
+         * of the runtime that move things every frame by themselves (per-frame scripts, physics, animations, camera
+         * following) check this. The addon tells with RUNTIME_PAUSED and RUNTIME_UNPAUSED.
+         * @type {boolean}
+         */
+        this.paused = false;
+        this.on('RUNTIME_PAUSED', () => {
+            this.paused = true;
+        });
+        this.on('RUNTIME_UNPAUSED', () => {
+            this.paused = false;
+        });
 
         /**
          * Currently known number of clones, used to enforce clone limit.
@@ -469,6 +518,18 @@ class Runtime extends EventEmitter {
         this.stageWidth = Runtime.STAGE_WIDTH;
         this.stageHeight = Runtime.STAGE_HEIGHT;
 
+        /**
+         * How the stage fits the screen, see engine/screen.js
+         * @type {import('./screen').ScreenSettings}
+         */
+        this.screen = Screen.defaultSettings();
+
+        /**
+         * Width / height of the screen that shows the stage, or null before the GUI or player sets it
+         * @type {?number}
+         */
+        this.viewportAspect = null;
+
         this.runtimeOptions = {
             // my-turbowarp: infinite clones, no misc limits and no fencing are always on
             maxClones: Infinity,
@@ -546,6 +607,15 @@ class Runtime extends EventEmitter {
          * @type {Scene3D}
          */
         this.scene3D = new Scene3D(this);
+
+        /**
+         * Calls custom blocks of other sprites, see "呼叫 [sprite] 的 [function]"
+         * @type {CrossCall}
+         */
+        this.crossCall = new CrossCall(this);
+
+        /** Canvas sprites, which pen blocks draw on */
+        this.canvasSprites = new CanvasSprites(this);
 
         /**
          * Maps extension ID to a JSON-serializable value.
@@ -680,6 +750,14 @@ class Runtime extends EventEmitter {
     }
 
     /**
+     * Event name when the screen mode, reference size or render scale changes.
+     * @const {string}
+     */
+    static get SCREEN_SETTINGS_CHANGED () {
+        return 'SCREEN_SETTINGS_CHANGED';
+    }
+
+    /**
      * Event name for compiler errors.
      * @const {string}
      */
@@ -692,6 +770,14 @@ class Runtime extends EventEmitter {
      */
     static get BEFORE_EXECUTE () {
         return 'BEFORE_EXECUTE';
+    }
+
+    /**
+     * Event called once per frame after the scripts of the update phase and the other scripts ran, and before the
+     * scripts of the after update phase, with the seconds since the last frame. Physics steps then.
+     */
+    static get PHYSICS_STEP () {
+        return 'PHYSICS_STEP';
     }
 
     /**
@@ -1950,12 +2036,38 @@ class Runtime extends EventEmitter {
     }
 
     /**
+     * Make a canvas with a 2D context, e.g. for canvas sprites. Environments without the DOM (such as tests) can
+     * replace this.
+     * @param {number} width
+     * @param {number} height
+     * @returns {?HTMLCanvasElement|OffscreenCanvas} canvas, or null if there is no way to make one
+     */
+    createCanvas2D (width, height) {
+        width = Math.ceil(width);
+        height = Math.ceil(height);
+        if (typeof document === 'undefined') {
+            return typeof OffscreenCanvas === 'undefined' ? null : new OffscreenCanvas(width, height);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        return canvas;
+    }
+
+    /**
      * Retrieve the function associated with the given opcode.
      * @param {!string} opcode The opcode to look up.
      * @return {Function} The function which implements the opcode.
      */
     getOpcodeFunction (opcode) {
-        return this._primitives[opcode];
+        const primitive = this._primitives[opcode];
+        if (!primitive || BlockSupport.isSameOnEveryKind(opcode)) return primitive;
+        // Does what block-support.js says for the kind of target it runs on
+        const cached = this._kindPrimitives[opcode];
+        if (cached && cached.primitive === primitive) return cached.wrapped;
+        const wrapped = BlockSupport.wrapPrimitive(opcode, primitive, this._replacements3D);
+        this._kindPrimitives[opcode] = {primitive, wrapped};
+        return wrapped;
     }
 
     /**
@@ -1984,6 +2096,10 @@ class Runtime extends EventEmitter {
      */
     attachAudioEngine (audioEngine) {
         this.audioEngine = audioEngine;
+        // Sounds of 3D sprites come from where they are (ROADMAP.md 6.8)
+        if (audioEngine && Array.isArray(audioEngine.effects) && !audioEngine.effects.includes(SpatialAudioEffect)) {
+            audioEngine.effects.push(SpatialAudioEffect);
+        }
     }
 
     /**
@@ -1996,6 +2112,7 @@ class Runtime extends EventEmitter {
         this.renderer.offscreenTouching = !this.runtimeOptions.fencing;
         // my-turbowarp: high quality pen is always on
         if (this.renderer.setUseHighQualityRender) this.renderer.setUseHighQualityRender(true);
+        if (this.renderer.setRenderScale) this.renderer.setRenderScale(this.screen.renderScale);
         this.updatePrivacy();
     }
 
@@ -2145,6 +2262,36 @@ class Runtime extends EventEmitter {
             thread.status === Thread.STATUS_YIELD_TICK ||
             !this.isActiveThread(thread)
         );
+    }
+
+    /**
+     * @returns {boolean} true while the game is running: scripts run (besides monitors), "when every frame" scripts
+     * run every frame, or physics still moves something. The 3D editor stays out of the way meanwhile.
+     */
+    isGameRunning () {
+        if (this.threads.length > this._getMonitorThreadCount(this.threads)) return true;
+        if (this.frameHatsEnabled) {
+            for (const target of this.executableTargets) {
+                if (BlocksRuntimeCache.getScripts(target.blocks, FRAME_HAT).length > 0) return true;
+            }
+        }
+        return this.scene3D.physics.isMoving();
+    }
+
+    /**
+     * "Broadcast and wait" finishes in the frame of its broadcast: after scripts asked for a redraw, the threads run
+     * once more while a thread waits for broadcast scripts that all finished or wait for a later frame, so that it
+     * can go on (ROADMAP.md 6.6).
+     * @returns {boolean} true if some thread waiting for scripts can go on now
+     */
+    hasResumableWaitingThread () {
+        for (const thread of this.threads) {
+            const waitingFor = thread.waitingForThreads;
+            if (!waitingFor || thread.framePhase) continue;
+            if (thread.status !== Thread.STATUS_RUNNING && thread.status !== Thread.STATUS_YIELD) continue;
+            if (waitingFor.every(other => this.isWaitingThread(other))) return true;
+        }
+        return false;
     }
 
     /**
@@ -2498,6 +2645,8 @@ class Runtime extends EventEmitter {
      */
     greenFlag () {
         this.stopAll();
+        // "when every frame" scripts run from now until the project stops, like a game's play mode
+        this.frameHatsEnabled = true;
         this.emit(Runtime.PROJECT_START);
         this.updateCurrentMSecs();
         this.ioDevices.clock.resetProjectTimer();
@@ -2513,6 +2662,7 @@ class Runtime extends EventEmitter {
      * Stop "everything."
      */
     stopAll () {
+        this.frameHatsEnabled = false;
         // Emit stop event to allow blocks to clean up any state.
         this.emit(Runtime.PROJECT_STOP_ALL);
 
@@ -2562,6 +2712,46 @@ class Runtime extends EventEmitter {
     }
 
     /**
+     * Run the scripts of one per-frame phase, between the green flag and stopping: start the "when every frame
+     * [phase]" hats of every sprite and clone whose
+     * script from an earlier frame isn't still running (e.g. waiting), then run every script of the phase once, until
+     * it finishes or yields. Scripts of a phase only ever run in that phase, however long they take, so that the
+     * order within a frame always holds. Requested redraws don't stop a phase.
+     * @param {string} phase FRAME_PHASE_UPDATE or FRAME_PHASE_LATE_UPDATE
+     * @returns {Thread[]} the scripts of the phase that finished
+     */
+    _runFramePhase (phase) {
+        if (!this.frameHatsEnabled || this.paused || !Object.prototype.hasOwnProperty.call(this._hats, FRAME_HAT)) {
+            return [];
+        }
+        const started = this.startHats(FRAME_HAT, {PHASE: phase});
+        for (const thread of started) thread.framePhase = phase;
+        const threads = this.threads.filter(thread => thread.framePhase === phase);
+        if (threads.length === 0) return [];
+        const done = [];
+        for (const thread of threads) {
+            if (thread.stack.length === 0 || thread.status === Thread.STATUS_DONE) {
+                done.push(thread);
+                continue;
+            }
+            thread.frameDelta = this.frameDelta;
+            if (thread.status === Thread.STATUS_YIELD_TICK) thread.status = Thread.STATUS_RUNNING;
+            if (thread.status === Thread.STATUS_RUNNING || thread.status === Thread.STATUS_YIELD) {
+                this.sequencer.activeThread = thread;
+                this.sequencer.stepThread(thread);
+                thread.warpTimer = null;
+                this.sequencer.activeThread = null;
+            }
+            if (thread.stack.length === 0 || thread.status === Thread.STATUS_DONE) done.push(thread);
+        }
+        if (done.length) {
+            this.threads = this.threads.filter(thread => !done.includes(thread));
+            for (const thread of done) this.threadMap.delete(thread.getId());
+        }
+        return done;
+    }
+
+    /**
      * Repeatedly run `sequencer.stepThreads` and filter out
      * inactive threads after each iteration.
      */
@@ -2601,11 +2791,25 @@ class Runtime extends EventEmitter {
             this.profiler.start(stepThreadsProfilerId);
         }
         this.frameCount++;
+        const now = Date.now();
+        // Seconds since the last frame, for the per-frame hats and physics. Long pauses (a hidden tab, a breakpoint)
+        // count as one normal frame so that nothing jumps.
+        this.frameDelta = this._lastFrameTime === null ? 0 : Math.min(0.1, (now - this._lastFrameTime) / 1000);
+        this._lastFrameTime = now;
         this.emit(Runtime.BEFORE_EXECUTE);
-        const doneThreads = this.sequencer.stepThreads();
+        // Each frame runs, in order: input (above), "when every frame [update]", the other scripts, physics,
+        // "when every frame [after update]", camera following and drawing (AFTER_EXECUTE). See ROADMAP.md 6.6.
+        const doneThreads = this._runFramePhase(FRAME_PHASE_UPDATE);
+        // A script in the update phase that moved a sprite must not keep the other scripts from running this frame
+        const redrawRequestedByPhase = this.redrawRequested;
+        this.redrawRequested = false;
+        doneThreads.push(...this.sequencer.stepThreads());
+        this.redrawRequested = this.redrawRequested || redrawRequestedByPhase;
         if (this.profiler !== null) {
             this.profiler.stop();
         }
+        this.emit(Runtime.PHYSICS_STEP, this.frameDelta);
+        doneThreads.push(...this._runFramePhase(FRAME_PHASE_LATE_UPDATE));
         this.emit(Runtime.AFTER_EXECUTE);
         this._updateGlows(doneThreads);
         // Add done threads so that even if a thread finishes within 1 frame, the green
@@ -2693,6 +2897,8 @@ class Runtime extends EventEmitter {
 
         if (oldEditingTarget !== this._editingTarget) {
             this.requestToolboxExtensionsUpdate();
+            // The gizmo on the stage follows the selected sprite
+            this.scene3D.editor.select(editingTarget);
         }
     }
 
@@ -2773,10 +2979,11 @@ class Runtime extends EventEmitter {
         if (this.stageWidth !== width || this.stageHeight !== height) {
             const deltaX = width - this.stageWidth;
             const deltaY = height - this.stageHeight;
-            // Preserve monitor location relative to the center of the stage
+            // Preserve monitor location relative to the center of the stage. Monitors are placed in stage units
+            // divided by the UI scale (see getUIScale).
             if (this._monitorState.size > 0) {
-                const offsetX = deltaX / 2;
-                const offsetY = deltaY / 2;
+                const offsetX = deltaX / 2 / this.getUIScale();
+                const offsetY = deltaY / 2 / this.getUIScale();
                 for (const monitor of this._monitorState.valueSeq()) {
                     this.requestUpdateMonitor({
                         id: monitor.id,
@@ -2799,7 +3006,55 @@ class Runtime extends EventEmitter {
             }
 
             this.emit(Runtime.STAGE_SIZE_CHANGED, width, height);
+            this.startHats('screen_whenresized');
         }
+    }
+
+    /**
+     * Change how the stage fits the screen.
+     * @param {object} settings some of mode, width, height, renderScale and shadows (see engine/screen.js)
+     */
+    setScreenSettings (settings) {
+        const screen = Screen.normalize(settings, this.screen);
+        const changed = Object.keys(screen).some(key => screen[key] !== this.screen[key]);
+        this.screen = screen;
+        if (this.renderer && this.renderer.setRenderScale) {
+            this.renderer.setRenderScale(screen.renderScale);
+        }
+        if (this.scene3D) this.scene3D.setShadowQuality(screen.shadows);
+        this._applyScreen();
+        if (changed) this.emit(Runtime.SCREEN_SETTINGS_CHANGED, Object.assign({}, screen));
+    }
+
+    /**
+     * @returns {import('./screen').ScreenSettings} a copy of how the stage fits the screen
+     */
+    getScreenSettings () {
+        return Object.assign({}, this.screen);
+    }
+
+    /**
+     * Tell the runtime the aspect ratio of the screen that shows the stage, which decides the stage size unless
+     * the screen mode is fixed.
+     * @param {?number} aspect width / height, or null to use the reference size
+     */
+    setViewportAspect (aspect) {
+        aspect = aspect > 0 && Number.isFinite(aspect) ? aspect : null;
+        if (aspect === this.viewportAspect) return;
+        this.viewportAspect = aspect;
+        this._applyScreen();
+    }
+
+    _applyScreen () {
+        const size = Screen.computeStageSize(this.screen, this.viewportAspect);
+        this.setStageSize(size.width, size.height);
+    }
+
+    /**
+     * @returns {number} how much bigger speech bubbles and monitors are than on a 480x360 stage
+     */
+    getUIScale () {
+        return Screen.getUIScale(this.screen);
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -2910,6 +3165,10 @@ class Runtime extends EventEmitter {
     }
 
     parseProjectOptions () {
+        // my-turbowarp: the framerate belongs to the project; one that doesn't store it runs at the default 60
+        if (this.frameLoop.framerate !== this._defaultStoredSettings.framerate) {
+            this.setFramerate(this._defaultStoredSettings.framerate);
+        }
         const comment = this.findProjectOptionsComment();
         if (!comment) return;
         const lineWithMagic = comment.text.split('\n').find(i => i.endsWith(COMMENT_CONFIG_MAGIC));
@@ -2946,10 +3205,12 @@ class Runtime extends EventEmitter {
         if (parsed.hq && this.renderer) {
             this.renderer.setUseHighQualityRender(true);
         }
-        const storedWidth = +parsed.width || this.stageWidth;
-        const storedHeight = +parsed.height || this.stageHeight;
-        if (storedWidth !== this.stageWidth || storedHeight !== this.stageHeight) {
-            this.setStageSize(storedWidth, storedHeight);
+        // The stored size is the reference size of the screen settings
+        if (+parsed.width || +parsed.height) {
+            this.setScreenSettings({
+                width: +parsed.width || this.screen.width,
+                height: +parsed.height || this.screen.height
+            });
         }
     }
 
@@ -2960,8 +3221,8 @@ class Runtime extends EventEmitter {
             interpolation: this.interpolationEnabled,
             turbo: this.turboMode,
             hq: this.renderer ? this.renderer.useHighQualityRender : false,
-            width: this.stageWidth,
-            height: this.stageHeight
+            width: this.screen.width,
+            height: this.screen.height
         };
     }
 

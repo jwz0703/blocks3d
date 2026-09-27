@@ -3,13 +3,13 @@
 
 // Sprite2 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["7qur6!bGgvC9I(Nd5.HP"];
-const b1 = stage.variables["sUOp@-6J4y0PqwiXit4!"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"steps"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"END?"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
-b0.value = 0;
-b1.value = "";
-while (!(("" + b1.value).toLowerCase() > "".toLowerCase())) {
+dataPath.set(target, null, b0, 0);
+dataPath.set(target, null, b1, "");
+while (!(toText(dataPath.get(target, null, b1)).toLowerCase() > "".toLowerCase())) {
 startHats("event_whenbroadcastreceived", { BROADCAST_OPTION: "step" });
 yield;
 }
@@ -20,12 +20,12 @@ retire(); return;
 
 // Sprite2 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["7qur6!bGgvC9I(Nd5.HP"];
-const b1 = stage.variables["sUOp@-6J4y0PqwiXit4!"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"steps"}]});
+const b1 = dataPath.makePath({"scope":"global","steps":[{"key":"END?"}]});
 return function* genXYZ () {
-b0.value = (toNotNaN(+b0.value) + 1);
-if ((b0.value === 5)) {
-b1.value = "end";
+dataPath.change(target, null, b0, 1);
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 5)) {
+dataPath.set(target, null, b1, "end");
 }
 retire(); return;
 }; })

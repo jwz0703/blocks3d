@@ -1,0 +1,75 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.modal-content {
+    max-width: 640px;
+    margin-top: 50px;
+}
+
+.body {
+    background: $ui-white;
+    color: $text-primary;
+    padding: 1rem 1.5rem 1.5rem;
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+}
+
+.section-title {
+    font-weight: bold;
+    margin: 0.75rem 0 0.5rem;
+}
+
+.grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tile {
+    width: 6.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.5rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $space;
+    background: $ui-white;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+}
+
+.tile:hover {
+    border-color: $looks-secondary;
+    box-shadow: 0 0 0 2px $looks-transparent;
+}
+
+.thumbnail {
+    width: 4.5rem;
+    height: 4.5rem;
+}
+
+.tile-name {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.upload-button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: $space;
+    background: $looks-secondary;
+    color: $ui-white;
+    font: inherit;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.hint {
+    font-size: 0.75rem;
+    opacity: 0.75;
+}

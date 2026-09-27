@@ -361,3 +361,13 @@ $fade-out-distance: 15px;
     /* overridden by JS; this will be used if the browser can't understand that color */
     background-color: white;
 }
+
+/* The costume tab of canvas sprites, which have no costumes */
+.canvas-tab-note {
+    max-width: 32rem;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: $text-primary;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}

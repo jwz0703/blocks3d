@@ -323,8 +323,13 @@ module.exports = [
         'scratch-sb1-converter$': standaloneModule('sb1-converter.js'),
         'three$': standaloneModule('three.js'),
         'three/examples/jsm/loaders/GLTFLoader.js$': standaloneModule('three-gltf-loader.js'),
-        'three/examples/jsm/utils/SkeletonUtils.js$': standaloneModule('three-skeleton-utils.js')
+        'three/examples/jsm/utils/SkeletonUtils.js$': standaloneModule('three-skeleton-utils.js'),
+        '@dimforge/rapier3d-compat$': standaloneModule('rapier.js')
     }, [
+        // Everything in one file, even what the VM loads with import() (Rapier)
+        new webpack.optimize.LimitChunkCountPlugin({
+            maxChunks: 1
+        }),
         new webpack.DefinePlugin({
             'process.env.NODE_ENV': '"production"',
             'process.env.DEBUG': Boolean(process.env.DEBUG),
@@ -351,7 +356,8 @@ module.exports = [
         )
     ]),
     standaloneConfig('standalone-music', './src/playground/standalone-music.js', {}, []),
-    standaloneConfig('standalone-three', './src/playground/standalone-three.js', {}, [])
+    standaloneConfig('standalone-three', './src/playground/standalone-three.js', {}, []),
+    standaloneConfig('standalone-rapier', './src/playground/standalone-rapier.js', {}, [])
 ].concat(
     process.env.NODE_ENV === 'production' || process.env.BUILD_MODE === 'dist' ? (
         // export as library

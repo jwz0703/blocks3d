@@ -6,6 +6,8 @@ import VM from 'scratch-vm';
 import {connect} from 'react-redux';
 
 import {STAGE_DISPLAY_SIZES} from '../lib/layout-constants';
+import {getFullScreenAspect} from '../lib/screen-utils';
+import {getPreviewAspect} from '../reducers/screen';
 import {getEventXY} from '../lib/touch-utils';
 import VideoProvider from '../lib/video/video-provider';
 import {BitmapAdapter as V2BitmapAdapter} from '@turbowarp/scratch-svg-renderer';
@@ -90,8 +92,11 @@ class Stage extends React.Component {
         this.attachRectEvents();
         this.attachMouseEvents(this.canvas);
         this.updateRect();
+        this.updateViewportAspect();
         this.renderer.resize(this.rect.width, this.rect.height);
         this.props.vm.runtime.addListener('QUESTION', this.questionListener);
+        // Editing 3D sprites on the stage, not in the player or fullscreen
+        this.props.vm.runtime.scene3D.editor.setEnabled(this.props.useEditorDragStyle);
     }
     shouldComponentUpdate (nextProps, nextState) {
         return this.props.stageSize !== nextProps.stageSize ||
@@ -104,7 +109,8 @@ class Stage extends React.Component {
             this.state.question !== nextState.question ||
             this.props.micIndicator !== nextProps.micIndicator ||
             this.props.isStarted !== nextProps.isStarted ||
-            this.props.customStageSize !== nextProps.customStageSize;
+            this.props.customStageSize !== nextProps.customStageSize ||
+            this.props.previewAspect !== nextProps.previewAspect;
     }
     componentDidUpdate (prevProps) {
         if (this.props.isColorPicking && !prevProps.isColorPicking) {
@@ -112,8 +118,10 @@ class Stage extends React.Component {
         } else if (!this.props.isColorPicking && prevProps.isColorPicking) {
             this.stopColorPickingLoop();
         }
+        this.updateViewportAspect();
         this.updateRect();
         this.renderer.resize(this.rect.width, this.rect.height);
+        this.props.vm.runtime.scene3D.editor.setEnabled(this.props.useEditorDragStyle);
     }
     componentWillUnmount () {
         this.detachMouseEvents(this.canvas);
@@ -171,6 +179,17 @@ class Stage extends React.Component {
     }
     updateRect () {
         this.rect = this.canvas.getBoundingClientRect();
+        if (this.props.isFullScreen) this.updateViewportAspect();
+    }
+    /**
+     * A stage that follows the shape of the screen (scratch-vm engine/screen.js) fills the window in full screen,
+     * and has the shape picked in the stage header otherwise.
+     */
+    updateViewportAspect () {
+        const aspect = this.props.isFullScreen ?
+            getFullScreenAspect() :
+            getPreviewAspect(this.props.previewAspect);
+        this.props.vm.setViewportAspect(aspect);
     }
     getScratchCoords (x, y) {
         const nativeSize = this.renderer.getNativeSize();
@@ -377,6 +396,8 @@ class Stage extends React.Component {
     }
     onStartDrag (x, y) {
         if (this.state.dragId) return;
+        // The 3D editor is orbiting the camera or moving a 3D sprite
+        if (this.props.vm.runtime.scene3D.editor.isBusy()) return;
         const drawableId = this.renderer.pick(x, y);
         if (drawableId === -1) return;
         const targetId = this.props.vm.getTargetIdForDrawableId(drawableId);
@@ -447,6 +468,7 @@ class Stage extends React.Component {
             vm, // eslint-disable-line no-unused-vars
             onActivateColorPicker, // eslint-disable-line no-unused-vars
             disableEditingTargetChange, // eslint-disable-line no-unused-vars
+            previewAspect, // eslint-disable-line no-unused-vars
             ...props
         } = this.props;
         return (
@@ -480,6 +502,7 @@ Stage.propTypes = {
     dimensions: PropTypes.arrayOf(PropTypes.number),
     isStarted: PropTypes.bool,
     micIndicator: PropTypes.bool,
+    previewAspect: PropTypes.string,
     onActivateColorPicker: PropTypes.func,
     onDeactivateColorPicker: PropTypes.func,
     stageDisplayWidth: PropTypes.number,
@@ -508,6 +531,7 @@ const mapStateToProps = state => ({
     dimensions: state.scratchGui.tw.dimensions,
     isStarted: state.scratchGui.vmStatus.started,
     micIndicator: state.scratchGui.micIndicator,
+    previewAspect: state.scratchGui.screen.previewAspect,
     stageDisplayWidth: state.scratchGui.stageSize.stageDisplayWidth,
     // Do not use editor drag style in fullscreen or player mode.
     useEditorDragStyle: !(state.scratchGui.mode.isFullScreen || state.scratchGui.mode.isPlayerOnly)

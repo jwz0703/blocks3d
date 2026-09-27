@@ -145,6 +145,8 @@ class ExtensionLibrary extends React.PureComponent {
                 this.props.onCategorySelected(extensionId);
             } else {
                 this.props.vm.extensionManager.loadExtensionURL(url)
+                    // The pen draws on canvas sprites, so the project needs one
+                    .then(() => (extensionId === 'pen' ? this.props.vm.ensureDefaultCanvas() : null))
                     .then(() => {
                         this.props.onCategorySelected(extensionId);
                     })

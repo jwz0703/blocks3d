@@ -1,4 +1,5 @@
 import {defineMessages} from 'react-intl';
+import {defaultEnvironment} from 'scratch-vm/src/engine/scene-3d-environment';
 import sharedMessages from '../shared-messages';
 
 let messages = defineMessages({
@@ -15,7 +16,8 @@ messages = {...messages, ...sharedMessages};
 const defaultTranslator = msgObj => msgObj.defaultMessage;
 
 /**
- * Generate a localized version of the default project
+ * Generate a localized version of the default project: a .3dsb project with a procedural sky, a camera sprite
+ * looking at the origin from a little above, and the 2D sprite of Scratch.
  * @param {function} translateFunction a function to use for translating the default names
  * @return {object} the project data json for the default project
  */
@@ -26,6 +28,10 @@ const projectData = translateFunction => {
             {
                 isStage: true,
                 name: 'Stage',
+                kind: '2d',
+                currentCamera: '相機',
+                // The stage follows the shape of the screen, 720 units tall (see scratch-vm engine/screen.js)
+                screen: {mode: 'height', width: 1280, height: 720, renderScale: 1},
                 variables: {
                     '`jEk@4|i[#Fk?(8x)AV.-my variable': [
                         translator(messages.variable),
@@ -43,7 +49,8 @@ const projectData = translateFunction => {
                         md5ext: 'cd21514d0531fdffb22204e0ec5ed84a.svg',
                         dataFormat: 'svg',
                         rotationCenterX: 240,
-                        rotationCenterY: 180
+                        rotationCenterY: 180,
+                        environment: defaultEnvironment()
                     }
                 ],
                 sounds: [],
@@ -52,6 +59,7 @@ const projectData = translateFunction => {
             {
                 isStage: false,
                 name: translator(messages.sprite, {index: 1}),
+                kind: '2d',
                 variables: {},
                 lists: {},
                 broadcasts: {},
@@ -78,12 +86,31 @@ const projectData = translateFunction => {
                 direction: 90,
                 draggable: false,
                 rotationStyle: 'all around'
+            },
+            {
+                isStage: false,
+                name: '相機',
+                kind: 'camera',
+                variables: {},
+                lists: {},
+                broadcasts: {},
+                blocks: {},
+                comments: {},
+                // Camera sprites save no costumes; they get their picture when loaded
+                costumes: [],
+                sounds: [],
+                volume: 100,
+                position: {x: 0, y: 2, z: 6},
+                rotation: {x: -15, y: 0, z: 0},
+                fov: 60
             }
         ],
         meta: {
             semver: '3.0.0',
             vm: '0.1.0',
-            agent: ''
+            agent: '',
+            format: '3dsb',
+            formatVersion: 2
         }
     });
 };

@@ -3,15 +3,15 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["PsAI*C{QHI3*4?O8p#TM"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 2", target);
 thread.procedures["Wreturn stops the script immediately"]();
-if ((b0.value === 25)) {
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 25)) {
 runtime.ext_scratch3_looks._say("pass return stopped the script immediately", target);
 }
 yield* waitThreads(startHats("event_whenbroadcastreceived", { BROADCAST_OPTION: "Test return outside of custom block" }));
-if ((toNotNaN(+b0.value) === 18)) {
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 18)) {
 runtime.ext_scratch3_looks._say("pass return worked to stop outside of custom block", target);
 }
 runtime.ext_scratch3_looks._say("end", target);
@@ -20,12 +20,12 @@ retire(); return;
 
 // Sprite1 Wreturn stops the script immediately
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["PsAI*C{QHI3*4?O8p#TM"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
 return function funXYZ_return_stops_the_scr () {
-b0.value = 0;
+dataPath.set(target, null, b0, 0);
 for (var a0 = 100; a0 > 0; a0--) {
-b0.value = (b0.value + 1);
-if ((b0.value === 25)) {
+dataPath.change(target, null, b0, 1);
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 25)) {
 return "stopped!";
 }
 }
@@ -35,12 +35,12 @@ return "";
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["PsAI*C{QHI3*4?O8p#TM"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"i"}]});
 return function* genXYZ () {
-b0.value = 0;
+dataPath.set(target, null, b0, 0);
 while (true) {
-b0.value = (toNotNaN(+b0.value) + 1);
-if ((b0.value === 18)) {
+dataPath.change(target, null, b0, 1);
+if ((toNotNaN(+dataPath.get(target, null, b0)) === 18)) {
 retire(); return;
 }
 yield;

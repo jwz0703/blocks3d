@@ -7,6 +7,7 @@ import {setHoveredSprite} from '../reducers/hovered-target';
 import {updateAssetDrag} from '../reducers/asset-drag';
 import VM from 'scratch-vm';
 import getCostumeUrl from '../lib/get-costume-url';
+import get3DThumbnail from '../lib/tw-3d-thumbnail';
 import DragRecognizer from '../lib/drag-recognizer';
 import {getEventXY} from '../lib/touch-utils';
 
@@ -35,16 +36,37 @@ class SpriteSelectorItem extends React.PureComponent {
             onDrag: this.handleDrag,
             onDragEnd: this.handleDragEnd
         });
+        this.state = {
+            thumbnail3D: null
+        };
     }
     componentDidMount () {
         document.addEventListener('touchend', this.handleTouchEnd);
+        this.update3DThumbnail();
+    }
+    componentDidUpdate (prevProps) {
+        if (prevProps.model3D !== this.props.model3D) {
+            this.update3DThumbnail();
+        }
     }
     componentWillUnmount () {
         document.removeEventListener('touchend', this.handleTouchEnd);
         this.dragRecognizer.reset();
+        this.unmounted = true;
+    }
+    update3DThumbnail () {
+        const key = this.props.model3D;
+        if (!key) return;
+        const {model, material} = JSON.parse(key);
+        get3DThumbnail(this.props.vm, model, material).then(url => {
+            // Keep the last thumbnail while a newer one renders, and ignore stale results
+            if (this.unmounted || this.props.model3D !== key || !url) return;
+            this.setState({thumbnail3D: url});
+        });
     }
     getCostumeData () {
         if (this.props.costumeURL) return this.props.costumeURL;
+        if (this.props.model3D && this.state.thumbnail3D) return this.state.thumbnail3D;
         if (!this.props.asset) return null;
 
         return getCostumeUrl(this.props.asset);
@@ -130,6 +152,7 @@ class SpriteSelectorItem extends React.PureComponent {
             dragPayload,
             receivedBlocks,
             costumeURL,
+            model3D,
             vm,
             /* eslint-enable no-unused-vars */
             ...props
@@ -165,6 +188,8 @@ SpriteSelectorItem.propTypes = {
     // eslint-disable-next-line react/forbid-prop-types
     id: PropTypes.any,
     index: PropTypes.number,
+    // JSON of {model, material} for 3D sprites; the thumbnail is rendered from it
+    model3D: PropTypes.string,
     // eslint-disable-next-line react/forbid-prop-types
     name: PropTypes.any,
     onClick: PropTypes.func,

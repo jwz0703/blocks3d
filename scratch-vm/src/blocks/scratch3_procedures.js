@@ -1,3 +1,10 @@
+const Thread = require('../engine/thread');
+const Timer = require('../util/timer');
+const CrossCall = require('../engine/cross-call');
+
+// How long the interpreter's "從 [sprite] 呼叫 [function]" reporter may run a custom block that waits, in ms
+const REPORTER_CALL_TIME = 500;
+
 class Scratch3ProcedureBlocks {
     constructor (runtime) {
         /**
@@ -17,7 +24,12 @@ class Scratch3ProcedureBlocks {
             procedures_call: this.call,
             procedures_return: this.return,
             argument_reporter_string_number: this.argumentReporterStringNumber,
-            argument_reporter_boolean: this.argumentReporterBoolean
+            argument_reporter_boolean: this.argumentReporterBoolean,
+            // Custom blocks of other sprites, see engine/cross-call.js. The compiler has its own version.
+            procedures_callsprite: (args, util) => this.callSprites(CrossCall.MODE_SPRITE, args, util),
+            procedures_callsprite_each: (args, util) => this.callSprites(CrossCall.MODE_EACH, args, util),
+            procedures_callsprite_id: (args, util) => this.callSprites(CrossCall.MODE_ID, args, util),
+            procedures_callsprite_reporter: this.callSpriteReporter.bind(this)
         };
     }
 
@@ -93,6 +105,94 @@ class Scratch3ProcedureBlocks {
         }
 
         util.startProcedure(procedureCode);
+    }
+
+    /**
+     * @param {string} mode see CrossCall.resolveTargets
+     * @param {object} args
+     * @param {object} util
+     * @returns {Array} the targets to call, and the custom block
+     */
+    _crossCallPlan (mode, args, util) {
+        const mutation = args.mutation || {};
+        return {
+            targets: this.runtime.crossCall.resolveTargets(mode, args.SPRITE, args.ID, util.target),
+            prototypeId: mutation.prototypeid || (args.FUNCTION ? `${args.FUNCTION}` : null),
+            proccode: mutation.proccode || null,
+            args: CrossCall.argumentsOf(args),
+            index: 0,
+            generator: null
+        };
+    }
+
+    /**
+     * The interpreter runs the other sprite's compiled custom block a piece at a time, like a block that waits.
+     * @param {string} mode see CrossCall.resolveTargets
+     * @param {object} args
+     * @param {object} util
+     */
+    callSprites (mode, args, util) {
+        const jsexecute = require('../compiler/jsexecute');
+        const frame = util.stackFrame;
+        if (!frame.crossCall) frame.crossCall = this._crossCallPlan(mode, args, util);
+        const plan = frame.crossCall;
+        const thread = util.thread;
+        for (;;) {
+            if (!plan.generator) {
+                if (plan.index >= plan.targets.length) {
+                    frame.crossCall = null;
+                    return;
+                }
+                const call = this.runtime.crossCall.prepare(thread, plan.targets[plan.index++], plan.prototypeId,
+                    plan.proccode, plan.args);
+                if (!call) continue;
+                if (!call.yields) {
+                    jsexecute.runInThread(thread, () => call.fn(...call.args));
+                    continue;
+                }
+                plan.generator = call.fn(...call.args);
+            }
+            const step = jsexecute.runInThread(thread, () => plan.generator.next());
+            if (step.done) {
+                plan.generator = null;
+                continue;
+            }
+            // It waits: come back to it later. A promise or the next frame set the thread's status themselves.
+            if (thread.status === Thread.STATUS_RUNNING) util.yield();
+            return;
+        }
+    }
+
+    /**
+     * Reporters can't wait in the interpreter, so a custom block that waits runs on for at most REPORTER_CALL_TIME.
+     * @param {object} args
+     * @param {object} util
+     * @returns {*} what the custom block returns
+     */
+    callSpriteReporter (args, util) {
+        const jsexecute = require('../compiler/jsexecute');
+        const plan = this._crossCallPlan(CrossCall.MODE_SPRITE, args, util);
+        const thread = util.thread;
+        const call = plan.targets.length ?
+            this.runtime.crossCall.prepare(thread, plan.targets[0], plan.prototypeId, plan.proccode, plan.args) :
+            null;
+        if (!call) return '';
+        const status = thread.status;
+        const value = jsexecute.runInThread(thread, () => {
+            if (!call.yields) return call.fn(...call.args);
+            const generator = call.fn(...call.args);
+            const timer = new Timer();
+            timer.start();
+            let step = generator.next();
+            while (!step.done && thread.status !== Thread.STATUS_PROMISE_WAIT &&
+                timer.timeElapsed() < REPORTER_CALL_TIME) {
+                thread.status = Thread.STATUS_RUNNING;
+                step = generator.next();
+            }
+            return step.done ? step.value : '';
+        });
+        thread.status = status;
+        return typeof value === 'undefined' ? '' : value;
     }
 
     return (args, util) {

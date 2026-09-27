@@ -5,7 +5,6 @@ const readFileToBuffer = require('../fixtures/readProjectFile').readFileToBuffer
 const VirtualMachine = require('../../src/index');
 const Variable = require('../../src/engine/variable');
 const StringUtil = require('../../src/util/string-util');
-const VariableUtil = require('../../src/util/variable-util');
 
 const projectUri = path.resolve(__dirname, '../fixtures/variable_characters.sb3');
 const project = readFileToBuffer(projectUri);
@@ -32,8 +31,6 @@ test('importing sb3 project with special chars in variable names', t => {
         const cat = vm.runtime.targets[1];
         const bananas = vm.runtime.targets[2];
 
-        const allVarListFields = VariableUtil.getAllVarRefsForTargets(vm.runtime.targets);
-
         const abVarId = Object.keys(stage.variables).filter(k => stage.variables[k].name === 'a&b')[0];
         const abVar = stage.variables[abVarId];
         const abMonitor = vm.runtime._monitorState.get(abVarId);
@@ -51,18 +48,14 @@ test('importing sb3 project with special chars in variable names', t => {
         t.equal(abVar.value[0], 'thing');
         t.equal(abVar.value[1], 'thing\'1');
 
-        // Find all the references for this list, and verify they have the correct ID
-        // There should be 3 fields, 2 on the stage, and one on the cat
-        t.equal(allVarListFields[abVarId].length, 3);
-        const stageBlocks = Object.keys(stage.blocks._blocks).map(blockId => stage.blocks._blocks[blockId]);
-        const stageListBlocks = stageBlocks.filter(block => Object.prototype.hasOwnProperty.call(block.fields, 'LIST'));
-        t.equal(stageListBlocks.length, 2);
-        t.equal(stageListBlocks[0].fields.LIST.id, abVarId);
-        t.equal(stageListBlocks[1].fields.LIST.id, abVarId);
-        const catBlocks = Object.keys(cat.blocks._blocks).map(blockId => cat.blocks._blocks[blockId]);
-        const catListBlocks = catBlocks.filter(block => Object.prototype.hasOwnProperty.call(block.fields, 'LIST'));
-        t.equal(catListBlocks.length, 1);
-        t.equal(catListBlocks[0].fields.LIST.id, abVarId);
+        // Variable and list blocks become path blocks when loaded (ROADMAP.md 4.12): find them by path.
+        // There should be 3, 2 on the stage, and one on the cat
+        // (global variables are 資料 blocks, variables of sprites 分身變數 blocks)
+        const pathsOf = target => Object.values(target.blocks._blocks)
+            .filter(block => block.inputs.PATH || (block.inputs.NAME && block.opcode.startsWith('twclonevars_')))
+            .map(block => target.blocks.getBlock((block.inputs.PATH || block.inputs.NAME).shadow).fields.TEXT.value);
+        t.equal(pathsOf(stage).filter(p => p === 'a&b').length, 2);
+        t.equal(pathsOf(cat).filter(p => p === 'a&b').length, 1);
 
         const fooVarId = Object.keys(stage.variables).filter(k => stage.variables[k].name === '"foo')[0];
         const fooVar = stage.variables[fooVarId];
@@ -80,19 +73,9 @@ test('importing sb3 project with special chars in variable names', t => {
         t.equal(fooVar.type, Variable.SCALAR_TYPE);
         t.equal(fooVar.value, 'foo');
 
-        // Find all the references for this variable, and verify they have the correct ID
         // There should be only two, one on the stage and one on bananas
-        t.equal(allVarListFields[fooVarId].length, 2);
-        const stageVarBlocks = stageBlocks.filter(
-            block => Object.prototype.hasOwnProperty.call(block.fields, 'VARIABLE')
-        );
-        t.equal(stageVarBlocks.length, 1);
-        t.equal(stageVarBlocks[0].fields.VARIABLE.id, fooVarId);
-        const catVarBlocks = catBlocks.filter(
-            block => Object.prototype.hasOwnProperty.call(block.fields, 'VARIABLE')
-        );
-        t.equal(catVarBlocks.length, 1);
-        t.equal(catVarBlocks[0].fields.VARIABLE.id, fooVarId);
+        t.equal(pathsOf(stage).filter(p => p === '"foo').length, 1);
+        t.equal(pathsOf(cat).filter(p => p === '"foo').length, 1);
 
         const ltPerfectVarId = Object.keys(bananas.variables).filter(k => bananas.variables[k].name === '< Perfect')[0];
         const ltPerfectVar = bananas.variables[ltPerfectVarId];
@@ -110,15 +93,8 @@ test('importing sb3 project with special chars in variable names', t => {
         t.equal(ltPerfectVar.type, Variable.SCALAR_TYPE);
         t.equal(ltPerfectVar.value, '> perfect');
 
-        // Find all the references for this variable, and verify they have the correct ID
         // There should be one
-        t.equal(allVarListFields[ltPerfectVarId].length, 1);
-        const bananasBlocks = Object.keys(bananas.blocks._blocks).map(blockId => bananas.blocks._blocks[blockId]);
-        const bananasVarBlocks = bananasBlocks.filter(
-            block => Object.prototype.hasOwnProperty.call(block.fields, 'VARIABLE')
-        );
-        t.equal(bananasVarBlocks.length, 1);
-        t.equal(bananasVarBlocks[0].fields.VARIABLE.id, ltPerfectVarId);
+        t.equal(pathsOf(bananas).filter(p => p === '< Perfect').length, 1);
 
         vm.quit();
         t.end();

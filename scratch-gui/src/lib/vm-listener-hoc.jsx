@@ -23,6 +23,7 @@ import {
     setPlatformMismatchDetails
 } from '../reducers/tw';
 import {setCustomStageSize} from '../reducers/custom-stage-size';
+import {setScreenSettings} from '../reducers/screen';
 import {openUnknownPlatformModal} from '../reducers/modals';
 import implementGuiAPI from './tw-extension-gui-api';
 import {BLOCKS_TAB_INDEX} from '../reducers/editor-tab';
@@ -75,6 +76,7 @@ const vmListenerHOC = function (WrappedComponent) {
             this.props.vm.on('COMPILE_ERROR', this.handleCompileError);
             this.props.vm.on('RUNTIME_STARTED', this.props.onClearCompileErrors);
             this.props.vm.on('STAGE_SIZE_CHANGED', this.props.onStageSizeChanged);
+            this.props.vm.on('SCREEN_SETTINGS_CHANGED', this.props.onScreenSettingsChanged);
             this.props.vm.on('CREATE_UNSANDBOXED_EXTENSION_API', implementGuiAPI);
             this.props.vm.runtime.on('PLATFORM_MISMATCH', this.props.onPlatformMismatch);
         }
@@ -124,6 +126,7 @@ const vmListenerHOC = function (WrappedComponent) {
             this.props.vm.off('COMPILE_ERROR', this.handleCompileError);
             this.props.vm.off('RUNTIME_STARTED', this.props.onClearCompileErrors);
             this.props.vm.off('STAGE_SIZE_CHANGED', this.props.onStageSizeChanged);
+            this.props.vm.off('SCREEN_SETTINGS_CHANGED', this.props.onScreenSettingsChanged);
             this.props.vm.off('CREATE_UNSANDBOXED_EXTENSION_API', implementGuiAPI);
             this.props.vm.runtime.off('PLATFORM_MISMATCH', this.props.onPlatformMismatch);
         }
@@ -246,6 +249,7 @@ const vmListenerHOC = function (WrappedComponent) {
                 onPlatformMismatch,
                 onRuntimeOptionsChanged,
                 onStageSizeChanged,
+                onScreenSettingsChanged,
                 onCompileError,
                 onClearCompileErrors,
                 onShowExtensionAlert,
@@ -283,6 +287,7 @@ const vmListenerHOC = function (WrappedComponent) {
         onPlatformMismatch: PropTypes.func.isRequired,
         onRuntimeOptionsChanged: PropTypes.func.isRequired,
         onStageSizeChanged: PropTypes.func,
+        onScreenSettingsChanged: PropTypes.func,
         onCompileError: PropTypes.func,
         onClearCompileErrors: PropTypes.func,
         projectChanged: PropTypes.bool,
@@ -345,6 +350,7 @@ const vmListenerHOC = function (WrappedComponent) {
         },
         onRuntimeOptionsChanged: options => dispatch(setRuntimeOptionsState(options)),
         onStageSizeChanged: (width, height) => dispatch(setCustomStageSize(width, height)),
+        onScreenSettingsChanged: settings => dispatch(setScreenSettings(settings)),
         onCompileError: errors => dispatch(addCompileError(errors)),
         onClearCompileErrors: () => dispatch(clearCompileErrors()),
         onShowExtensionAlert: data => {

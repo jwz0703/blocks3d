@@ -117,6 +117,9 @@ class Scratch3EventBlocks {
             // be waiting.
             const waiting = util.stackFrame.startedThreads
                 .some(thread => instance.runtime.threads.indexOf(thread) !== -1);
+            // Lets the sequencer run another tick in this frame once they are done, see
+            // runtime.hasResumableWaitingThread
+            util.thread.waitingForThreads = waiting ? util.stackFrame.startedThreads : null;
             if (waiting) {
                 // If all threads are waiting for the next tick or later yield
                 // for a tick as well. Otherwise yield until the next loop of

@@ -176,6 +176,18 @@ const mapStateToProps = state => {
         loadingStateVisible: state.scratchGui.modals.loadingProject,
         projectId: state.scratchGui.projectState.projectId,
         filesTabVisible: state.scratchGui.editorTab.activeTabIndex === FILES_TAB_INDEX,
+        targetIs3D: !!(
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget] &&
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget].kind === '3d'
+        ),
+        targetIsCamera: !!(
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget] &&
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget].kind === 'camera'
+        ),
+        targetIsCanvas: !!(
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget] &&
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget].kind === 'canvas'
+        ),
         targetIsStage: (
             state.scratchGui.targets.stage &&
             state.scratchGui.targets.stage.id === state.scratchGui.targets.editingTarget

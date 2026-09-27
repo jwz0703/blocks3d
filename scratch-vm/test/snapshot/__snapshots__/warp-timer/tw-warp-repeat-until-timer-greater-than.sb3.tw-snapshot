@@ -12,14 +12,14 @@ retire(); return;
 
 // Sprite1 Wrun without screen refresh
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["F?*}X,`9XBpN_[piGRrz"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"bail at"}]});
 return function* genXYZ_run_without_screen_r () {
-b0.value = ((daysSince2000() * 86400) + 3);
+dataPath.set(target, null, b0, ((daysSince2000() * 86400) + 3));
 runtime.ioDevices.clock.resetProjectTimer();
-while (!((runtime.ioDevices.clock.projectTimer() > 0.1) || compareGreaterThan((daysSince2000() * 86400), b0.value))) {
+while (!((runtime.ioDevices.clock.projectTimer() > 0.1) || compareGreaterThan((daysSince2000() * 86400), dataPath.get(target, null, b0)))) {
 if (isStuck()) yield;
 }
-if (compareLessThan((daysSince2000() * 86400), b0.value)) {
+if (compareLessThan((daysSince2000() * 86400), dataPath.get(target, null, b0))) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 return "";

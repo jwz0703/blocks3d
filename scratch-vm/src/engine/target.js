@@ -2,6 +2,7 @@ const EventEmitter = require('events');
 
 const Blocks = require('./blocks');
 const Variable = require('../engine/variable');
+const DataPath = require('../util/data-path');
 const Comment = require('../engine/comment');
 const uid = require('../util/uid');
 const log = require('../util/log');
@@ -421,11 +422,8 @@ class Target extends EventEmitter {
                 originalVariable.type,
                 originalVariable.isCloud
             );
-            if (newVariable.type === Variable.LIST_TYPE) {
-                newVariable.value = originalVariable.value.slice(0);
-            } else {
-                newVariable.value = originalVariable.value;
-            }
+            // Values can be objects and arrays (see util/data-path.js): clones get their own copy
+            newVariable.value = DataPath.copyValue(originalVariable.value);
             return newVariable;
         }
         return null;

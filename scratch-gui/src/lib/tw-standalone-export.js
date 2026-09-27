@@ -19,6 +19,11 @@ const OPTIONAL_SCRIPTS = [
         name: 'three',
         extensionId: 'three3d',
         url: `${process.env.ROOT}js/standalone-three.js`
+    },
+    {
+        name: 'rapier',
+        extensionId: 'physics3d',
+        url: `${process.env.ROOT}js/standalone-rapier.js`
     }
 ];
 
@@ -42,9 +47,20 @@ const fetchScript = async url => {
  */
 const getUsedExtensions = vm => {
     const used = new Set(JSON.parse(vm.toJSON()).extensions || []);
-    // 3D sprites need three.js even when no procedural object blocks (three3d) are used
-    if (vm.runtime.targets.some(target => target.is3D)) {
+    // 3D sprites and 3D environments need three.js even when no procedural object blocks (three3d) are used. A
+    // camera sprite alone doesn't: there is nothing to see through it.
+    const stage = vm.runtime.getTargetForStage();
+    if (
+        vm.runtime.targets.some(target => target.is3D && !target.isCamera) ||
+        (stage && stage.getCostumes().some(costume => costume.environment)) ||
+        used.has('camera3d') ||
+        used.has('environment3d')
+    ) {
         used.add('three3d');
+    }
+    // Collision and physics need Rapier: touching blocks of 3D sprites too, not only the physics blocks
+    if (vm.runtime.scene3D && vm.runtime.scene3D.usesPhysics()) {
+        used.add('physics3d');
     }
     return used;
 };

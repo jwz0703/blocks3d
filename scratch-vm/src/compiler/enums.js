@@ -136,8 +136,8 @@ const StackOpcode = {
     VAR_SHOW: 'var.show',
     VAR_HIDE: 'var.hide',
 
-    LOCAL_SET: 'local.set',
-    LOCAL_CHANGE: 'local.change',
+    /** A 資料 block that changes a path (see extensions/tw_data) */
+    DATA_OP: 'data.op',
 
     EVENT_BROADCAST: 'event.broadcast',
     EVENT_BROADCAST_AND_WAIT: 'event.broadcastAndWait',
@@ -170,6 +170,15 @@ const StackOpcode = {
     MOTION_ROTATION_STYLE_SET: 'motion.setRotationStyle',
     MOTION_DIRECTION_SET: 'motion.setDirection',
 
+    // 3D sprites and camera sprites, see ScriptTreeGenerator.descend3DStackedBlock
+    MOTION3D_XYZ_SET: 'motion3d.setXYZ',
+    MOTION3D_ROTATION_SET: 'motion3d.setRotation',
+    MOTION3D_MOVE_FORWARD: 'motion3d.moveForward',
+    MOTION3D_MOVE_LEVEL: 'motion3d.moveLevel',
+    MOTION3D_LOOK_AT: 'motion3d.lookAt',
+    LOOKS3D_SCALE_SET: 'looks3d.setScale',
+    CAMERA3D_FOV_SET: 'camera3d.setFov',
+
     PEN_UP: 'pen.up',
     PEN_DOWN: 'pen.down',
     PEN_CLEAR: 'pen.clear',
@@ -187,7 +196,9 @@ const StackOpcode = {
     SENSING_TIMER_RESET: 'timer.reset',
 
     PROCEDURE_RETURN: 'procedures.return',
-    PROCEDURE_CALL: 'procedures.call'
+    PROCEDURE_CALL: 'procedures.call',
+    // A custom block of another sprite, see engine/cross-call.js
+    PROCEDURE_CALL_SPRITE: 'procedures.callSprite'
 };
 
 /**
@@ -228,6 +239,9 @@ const InputOpcode = {
     MOTION_X_GET: 'motion.x',
     MOTION_Y_GET: 'motion.y',
     MOTION_DIRECTION_GET: 'motion.direction',
+
+    // A number field of a 3D sprite or camera sprite, e.g. z or rotationY
+    MOTION3D_FIELD_GET: 'motion3d.field',
 
     OP_ADD: 'op.add',
     OP_AND: 'op.and',
@@ -296,14 +310,22 @@ const InputOpcode = {
     SENSING_USERNAME: 'sensing.username',
 
     PROCEDURE_CALL: 'procedures.call',
+    // A custom block of another sprite, see engine/cross-call.js
+    PROCEDURE_CALL_SPRITE: 'procedures.callSprite',
     PROCEDURE_ARGUMENT: 'procedures.argument',
 
     CONTROL_COUNTER: 'control.counter',
     CONTROL_FRAME_DELTA: 'control.frameDelta',
     CONTROL_FOR_RANGE_INDEX: 'control.forRangeIndex',
 
-    LOCAL_GET: 'local.get',
-    LOCAL_EXISTS: 'local.exists',
+    CONTROL_CLONE_ID: 'control.cloneId',
+
+    /** A 資料 reporter that reads a path (see extensions/tw_data) */
+    DATA_OP: 'data.op',
+    /** The self, global or local reporter */
+    DATA_SCOPE: 'data.scope',
+    /** The text block with ${path} in it */
+    DATA_TEMPLATE: 'data.template',
 
     TW_KEY_LAST_PRESSED: 'tw.lastKeyPressed'
 };

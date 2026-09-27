@@ -118,3 +118,8 @@
     min-width: auto;
     min-height: auto;
 }
+
+/* Blocks that do nothing on this kind of sprite (2D or 3D), see containers/blocks.jsx */
+.unsupported-block {
+    opacity: 0.4;
+}

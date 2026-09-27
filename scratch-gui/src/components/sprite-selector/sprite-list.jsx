@@ -14,6 +14,17 @@ import styles from './sprite-selector.css';
 
 const ThrottledSpriteSelectorItem = ThrottledPropertyHOC('asset', 500)(SpriteSelectorItem);
 
+/**
+ * @param {object} sprite target from the VM
+ * @returns {?string} what the thumbnail of a 3D sprite shows, as a string so that it compares by value
+ */
+const get3DModelKey = sprite => {
+    if (sprite.kind !== '3d') return null;
+    const model = sprite.models && sprite.models[sprite.currentModel];
+    if (!model) return null;
+    return JSON.stringify({model, material: sprite.material});
+};
+
 const SpriteList = function (props) {
     const {
         containerRef,
@@ -88,6 +99,7 @@ const SpriteList = function (props) {
                                 id={sprite.id}
                                 index={index}
                                 key={sprite.id}
+                                model3D={get3DModelKey(sprite)}
                                 name={sprite.name}
                                 selected={sprite.id === selectedId}
                                 onClick={onSelectSprite}

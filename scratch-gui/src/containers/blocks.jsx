@@ -1,7 +1,7 @@
 import bindAll from 'lodash.bindall';
 import debounce from 'lodash.debounce';
 import defaultsDeep from 'lodash.defaultsdeep';
-import makeToolboxXML from '../lib/make-toolbox-xml';
+import makeToolboxXML, {xmlEscape} from '../lib/make-toolbox-xml';
 import PropTypes from 'prop-types';
 import React from 'react';
 import {intlShape, injectIntl, defineMessages} from 'react-intl';
@@ -10,6 +10,7 @@ import VM from 'scratch-vm';
 
 import log from '../lib/log.js';
 import Prompt from './prompt.jsx';
+import blocksStyles from '../components/blocks/blocks.css';
 import BlocksComponent from '../components/blocks/blocks.jsx';
 import ExtensionLibrary from './extension-library.jsx';
 import extensionData from '../lib/libraries/extensions/index.jsx';
@@ -45,6 +46,7 @@ import LoadScratchBlocksHOC from '../lib/tw-load-scratch-blocks-hoc.jsx';
 import {findTopBlock} from '../lib/backpack/code-payload.js';
 import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
 import installFlyoutResizer from '../lib/tw-flyout-resizer.js';
+import updateBlockHints from '../lib/tw-block-hints.js';
 
 // TW: Strings we add to scratch-blocks are localized here
 const messages = defineMessages({
@@ -99,6 +101,7 @@ class Blocks extends React.Component {
 
         bindAll(this, [
             'attachVM',
+            'handleUnsupportedBlocks',
             'detachVM',
             'getToolboxXML',
             'handleCategorySelected',
@@ -133,6 +136,7 @@ class Blocks extends React.Component {
             prompt: null
         };
         this.onTargetsUpdate = debounce(this.onTargetsUpdate, 100);
+        this.handleBlockHints = debounce(() => updateBlockHints(this.workspace, this.props.vm), 150);
         this.toolboxUpdateQueue = [];
     }
     componentDidMount () {
@@ -208,6 +212,7 @@ class Blocks extends React.Component {
             const returnIndex = xmlList.findIndex(xml =>
                 xml.getAttribute('type') === this.ScratchBlocks.PROCEDURES_RETURN_BLOCK_TYPE);
             xmlList.splice(returnIndex + 1, 0, ...this.getLocalVariableBlocks());
+            xmlList.push(...this.getCrossCallBlocks());
             return xmlList;
         };
         this.workspace.registerToolboxCategoryCallback(this.ScratchBlocks.PROCEDURE_CATEGORY_NAME,
@@ -306,6 +311,7 @@ class Blocks extends React.Component {
         }
     }
     componentWillUnmount () {
+        this.handleBlockHints.cancel();
         this.detachVM();
         this.unmounted = true;
         this.removeFlyoutResizer();
@@ -374,6 +380,8 @@ class Blocks extends React.Component {
 
     attachVM () {
         this.workspace.addChangeListener(this.props.vm.blockListener);
+        this.workspace.addChangeListener(this.handleUnsupportedBlocks);
+        this.workspace.addChangeListener(this.handleBlockHints);
         this.flyoutWorkspace = this.workspace
             .getFlyout()
             .getWorkspace();
@@ -419,8 +427,30 @@ class Blocks extends React.Component {
         });
     }
 
+    updateToolboxBlockInput (id, inputName, value) {
+        this.withToolboxUpdates(() => {
+            const block = this.workspace
+                .getFlyout()
+                .getWorkspace()
+                .getBlockById(id);
+            const shadow = block && block.getInputTargetBlock(inputName);
+            if (shadow) {
+                shadow.inputList[0].fieldRow[0].setValue(value);
+            }
+        });
+    }
+
     onTargetsUpdate () {
-        if (this.props.vm.editingTarget && this.workspace.getFlyout()) {
+        const target = this.props.vm.editingTarget;
+        if (target && target.is3D && this.workspace.getFlyout()) {
+            // 3D units are small, so keep 2 decimals
+            const round = n => (Math.round(n * 100) / 100).toString();
+            ['gotoxyz', 'glidexyz'].forEach(opcode => {
+                this.updateToolboxBlockInput(`motion3d_${opcode}`, 'X', round(target.x));
+                this.updateToolboxBlockInput(`motion3d_${opcode}`, 'Y', round(target.y));
+                this.updateToolboxBlockInput(`motion3d_${opcode}`, 'Z', round(target.z));
+            });
+        } else if (target && this.workspace.getFlyout()) {
             ['glide', 'move', 'set'].forEach(prefix => {
                 this.updateToolboxBlockValue(`${prefix}x`, Math.round(this.props.vm.editingTarget.x).toString());
                 this.updateToolboxBlockValue(`${prefix}y`, Math.round(this.props.vm.editingTarget.y).toString());
@@ -478,7 +508,12 @@ class Blocks extends React.Component {
                 targetCostumes[targetCostumes.length - 1].name,
                 stageCostumes[stageCostumes.length - 1].name,
                 targetSounds.length > 0 ? targetSounds[targetSounds.length - 1].name : '',
-                this.props.theme.getBlockColors()
+                this.props.theme.getBlockColors(),
+                {
+                    is3D: !!target.is3D,
+                    has3D: runtime.targets.some(t => t.is3D && !t.isCamera),
+                    isInPalette: opcode => this.props.vm.isBlockInPalette(opcode, this.props.vm.getTargetKind(target))
+                }
             );
         } catch {
             return null;
@@ -494,6 +529,36 @@ class Blocks extends React.Component {
             .replace(/<\/category>$/, '');
         const dom = this.ScratchBlocks.Xml.textToDom(`<xml>${blocksXML}</xml>`);
         return Array.from(dom.children);
+    }
+    /**
+     * The blocks that call custom blocks of other sprites (ROADMAP.md 6.6), for the end of My Blocks. They start with
+     * the first other sprite that has custom blocks, and its first custom block.
+     * @returns {Element[]} XML of the blocks
+     */
+    getCrossCallBlocks () {
+        const {vm} = this.props;
+        const editingTarget = vm.editingTarget;
+        const prototypesOf = target => Object.values(target.blocks._blocks)
+            .filter(block => block.opcode === 'procedures_prototype' && block.mutation &&
+                target.blocks.getBlock(block.parent) &&
+                target.blocks.getBlock(block.parent).opcode === 'procedures_definition');
+        const callee = vm.runtime.targets.find(target => target.isOriginal && target !== editingTarget &&
+            prototypesOf(target).length > 0);
+        const sprite = callee ? (callee.isStage ? '_stage_' : callee.getName()) : '_myself_';
+        const prototype = callee ? prototypesOf(callee)[0] : null;
+        const mutation = prototype ?
+            `<mutation sprite="${xmlEscape(sprite)}" proccode="${xmlEscape(prototype.mutation.proccode)}" ` +
+                `argumentids="${xmlEscape(String(prototype.mutation.argumentids || '[]'))}" ` +
+                `prototypeid="${xmlEscape(prototype.id)}" generateshadows="true"></mutation>` :
+            `<mutation sprite="${xmlEscape(sprite)}" proccode="" argumentids="[]" prototypeid="" ` +
+                'generateshadows="true"></mutation>';
+        const fields = `<field name="SPRITE">${xmlEscape(sprite)}</field>` +
+            `<field name="FUNCTION">${xmlEscape(prototype ? prototype.id : '')}</field>`;
+        const block = (type, inputs = '') => `<block type="${type}">${mutation}${fields}${inputs}</block>`;
+        const id = '<value name="ID"><shadow type="text"><field name="TEXT">1</field></shadow></value>';
+        const xml = `<xml><sep gap="36"/>${block('procedures_callsprite')}${block('procedures_callsprite_each')}` +
+            `${block('procedures_callsprite_id', id)}${block('procedures_callsprite_reporter')}</xml>`;
+        return Array.from(this.ScratchBlocks.Xml.textToDom(xml).children);
     }
     onWorkspaceUpdate (data) {
         // When we change sprites, update the toolbox to have the new sprite's blocks
@@ -540,6 +605,27 @@ class Blocks extends React.Component {
         // fresh workspace and we don't want any changes made to another sprites
         // workspace to be 'undone' here.
         this.workspace.clearUndo();
+        this.markUnsupportedBlocks(this.workspace.getAllBlocks());
+    }
+    /**
+     * Fade the blocks that do nothing on the editing target's kind of sprite (2D or 3D), e.g. pen blocks dragged to a
+     * 3D sprite, so that it is clear they have no effect there.
+     * @param {Array<Blockly.BlockSvg>} blocks blocks of the workspace
+     */
+    markUnsupportedBlocks (blocks) {
+        const vm = this.props.vm;
+        const kind = vm.getTargetKind(vm.editingTarget);
+        for (const block of blocks) {
+            const svg = block.getSvgRoot && block.getSvgRoot();
+            if (!svg) continue;
+            const unsupported = vm.isBlockUnsupported(block.type, kind);
+            svg.classList.toggle(blocksStyles.unsupportedBlock, unsupported);
+        }
+    }
+    handleUnsupportedBlocks (event) {
+        if (event.type !== this.ScratchBlocks.Events.BLOCK_CREATE) return;
+        const blocks = event.ids.map(id => this.workspace.getBlockById(id)).filter(Boolean);
+        this.markUnsupportedBlocks(blocks);
     }
     handleMonitorsUpdate (monitors) {
         // Update the checkboxes of the relevant monitors.

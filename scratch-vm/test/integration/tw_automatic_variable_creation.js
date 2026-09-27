@@ -28,13 +28,10 @@ for (const compilerEnabled of [false, true]) {
             const variables = vm.runtime.targets[1].variables;
             t.equal(Object.keys(variables).length, 1, 'created 1 new variable');
 
-            // Scratch quirk - the entry in .variables should have key "null"
-            const newVariableKey = Object.keys(variables)[0];
-            t.equal(newVariableKey, 'null', 'key is "null"');
-
-            // Scratch quirk - the actual variable.id should be the random string
+            // Variable blocks become paths when loaded (ROADMAP.md 4.12), so the variable is found and made by name:
+            // Scratch's quirk of a variable stored under the key "null" is gone
             const newVariable = Object.values(variables)[0];
-            t.notEqual(newVariable.id, 'null', 'variable.id is not "null"');
+            t.equal(Object.keys(variables)[0], newVariable.id, 'stored under its id');
             t.type(newVariable.id, 'string', 'variable.id is a string');
 
             t.end();

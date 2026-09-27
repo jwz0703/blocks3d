@@ -8,7 +8,8 @@ const evaluateRuntimeFunction = functionName => jsexecute.scopedEval(functionNam
 test('runtimeFunctions are valid', t => {
     for (const functionName of Object.keys(jsexecute.runtimeFunctions)) {
         const fn = evaluateRuntimeFunction(functionName);
-        t.type(fn, 'function', `${functionName} is function`);
+        // dataPath is the module of the 資料 blocks' paths
+        t.type(fn, functionName === 'dataPath' ? 'object' : 'function', `${functionName} is function`);
     }
     t.end();
 });

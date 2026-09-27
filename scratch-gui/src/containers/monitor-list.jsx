@@ -5,6 +5,7 @@ import {injectIntl, intlShape} from 'react-intl';
 
 import {connect} from 'react-redux';
 import {moveMonitorRect, resetMonitorLayout} from '../reducers/monitor-layout';
+import {getUIScale} from '../reducers/screen';
 
 import errorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import OpcodeLabels from '../lib/opcode-labels';
@@ -62,6 +63,7 @@ MonitorList.propTypes = {
 };
 const mapStateToProps = state => ({
     customStageSize: state.scratchGui.customStageSize,
+    uiScale: getUIScale(state.scratchGui.screen.settings),
     monitors: state.scratchGui.monitors,
     monitorLayout: state.scratchGui.monitorLayout
 });

@@ -12,10 +12,10 @@ retire(); return;
 
 // Text Wtest 1
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = target.variables["ts-.PQ{/]mN_9@MbG:m/"];
+const b0 = dataPath.makePath({"scope":"self","steps":[{"key":"variable"}]});
 return function* genXYZ_test_1 () {
 for (var a0 = toNotNaN(+thread.procedures["Wany procedure reporter"]()); a0 >= 0.5; a0--) {
-b0.value = (toNotNaN(+b0.value) + 1);
+dataPath.change(target, null, b0, 1);
 if (isStuck()) yield;
 }
 return "";

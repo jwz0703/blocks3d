@@ -397,6 +397,8 @@ class MenuBar extends React.Component {
                 description="Menu bar item for restoring the last deleted costume."
                 id="gui.menuBar.restoreCostume"
             />);
+        case 'Model':
+            return '復原模型';
         default: {
             return (<FormattedMessage
                 defaultMessage="Restore"
@@ -812,19 +814,8 @@ class MenuBar extends React.Component {
                                     )}</TurboMode>
                                     <FramerateChanger>{(changeFramerate, {framerate}) => (
                                         <MenuItem onClick={changeFramerate}>
-                                            {framerate === 60 ? (
-                                                <FormattedMessage
-                                                    defaultMessage="Turn off 60 FPS Mode"
-                                                    description="Menu bar item for turning off 60 FPS mode"
-                                                    id="tw.menuBar.60off"
-                                                />
-                                            ) : (
-                                                <FormattedMessage
-                                                    defaultMessage="Turn on 60 FPS Mode"
-                                                    description="Menu bar item for turning on 60 FPS mode"
-                                                    id="tw.menuBar.60on"
-                                                />
-                                            )}
+                                            {/* eslint-disable-next-line react/jsx-no-literals */}
+                                            {framerate === 60 ? '切換到 30 FPS（省電）' : '恢復 60 FPS'}
                                         </MenuItem>
                                     )}</FramerateChanger>
                                     <ChangeUsername>{changeUsername => (

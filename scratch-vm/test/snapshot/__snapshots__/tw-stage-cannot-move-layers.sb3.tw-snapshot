@@ -3,10 +3,10 @@
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
 runtime.ext_scratch3_looks._say("plan 1", target);
-b0.value = "Initial";
+dataPath.set(target, null, b0, "Initial");
 thread.timer = timer();
 var a0 = Math.max(0, 1000 * 0);
 runtime.requestRedraw();
@@ -22,9 +22,9 @@ retire(); return;
 
 // Sprite1 script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = stage.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
-if ((("" + b0.value).toLowerCase() === "Initial".toLowerCase())) {
+if ((toText(dataPath.get(target, null, b0)).toLowerCase() === "Initial".toLowerCase())) {
 runtime.ext_scratch3_looks._say("pass", target);
 }
 retire(); return;
@@ -38,8 +38,8 @@ retire(); return;
 
 // Stage script
 (function factoryXYZ(thread) { const target = thread.target; const runtime = target.runtime; const stage = runtime.getTargetForStage();
-const b0 = target.variables["`jEk@4|i[#Fk?(8x)AV.-my variable"];
+const b0 = dataPath.makePath({"scope":"global","steps":[{"key":"my variable"}]});
 return function* genXYZ () {
-b0.value = "Stage callback";
+dataPath.set(target, null, b0, "Stage callback");
 retire(); return;
 }; })

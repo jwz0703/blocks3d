@@ -13,6 +13,7 @@ const globalState = {
     Cast: require('../util/cast'),
     log: require('../util/log'),
     blockUtility: require('./compat-block-utility'),
+    dataPath: require('../util/data-path'),
     /** @type{import("../engine/thread")?} */
     thread: null
 };
@@ -55,6 +56,8 @@ runtimeFunctions.startHats = `const startHats = (requestedHat, optMatchFields) =
 runtimeFunctions.waitThreads = `const waitThreads = function*(threads) {
     const thread = globalState.thread;
     const runtime = thread.target.runtime;
+    // Lets the sequencer run another tick in this frame once they are done, see runtime.hasResumableWaitingThread
+    thread.waitingForThreads = threads;
 
     while (true) {
         // determine whether any threads are running
@@ -67,6 +70,7 @@ runtimeFunctions.waitThreads = `const waitThreads = function*(threads) {
         }
         if (!anyRunning) {
             // all threads are finished, can resume
+            thread.waitingForThreads = null;
             return;
         }
 
@@ -393,8 +397,7 @@ runtimeFunctions.distance = `const distance = menu => {
     } else {
         const distTarget = thread.target.runtime.getSpriteTargetByName(menu);
         if (!distTarget) return 10000;
-        targetX = distTarget.x;
-        targetY = distTarget.y;
+        ({x: targetX, y: targetY} = distTarget.getStagePosition());
     }
 
     const dx = thread.target.x - targetX;
@@ -579,12 +582,16 @@ runtimeFunctions.tan = `const tan = (angle) => {
 }`;
 
 /**
- * Read a local variable (twlocalvars) of the current custom block call.
- * @param {Map<string, *>} locals The locals of the call.
- * @param {string} name Variable name.
- * @returns {*} Its value, or 0 if it was never set.
+ * Paths of the 資料 blocks: see util/data-path.js
  */
-runtimeFunctions.localGet = `const localGet = (locals, name) => (locals.has(name) ? locals.get(name) : 0)`;
+runtimeFunctions.dataPath = `const dataPath = globalState.dataPath`;
+
+/**
+ * Cast to text like Cast.toString: objects and arrays become JSON.
+ * @param {*} value
+ * @returns {string} text
+ */
+runtimeFunctions.toText = `const toText = value => (typeof value === 'object' && value !== null ? globalState.Cast.stringifyObject(value) : "" + value)`;
 
 /**
  * @param {function} callback The function to run
@@ -604,6 +611,38 @@ runtimeFunctions.yieldThenCall = `const yieldThenCall = function* (callback, ...
 runtimeFunctions.yieldThenCallGenerator = `const yieldThenCallGenerator = function* (callback, ...args) {
     yield;
     return yield* callback(...args);
+}`;
+
+/**
+ * Call a custom block of other sprites, one after the other, in this thread (see engine/cross-call.js).
+ * @param {Target[]} targets the sprites or clones to call
+ * @param {?string} prototypeId id of the custom block's prototype block
+ * @param {?string} proccode the custom block's proccode when the calling block was made
+ * @param {object} args argument values by argument id
+ * @returns {*} what the last call returned, or an empty string
+ */
+runtimeFunctions.callSprites = `const callSprites = function* (targets, prototypeId, proccode, args) {
+    const thread = globalState.thread;
+    const crossCall = thread.target.runtime.crossCall;
+    let result = '';
+    for (let i = 0; i < targets.length; i++) {
+        const call = crossCall.prepare(thread, targets[i], prototypeId, proccode, args);
+        if (!call) continue;
+        const value = call.yields ? yield* call.fn(...call.args) : call.fn(...call.args);
+        result = typeof value === 'undefined' ? '' : value;
+    }
+    return result;
+}`;
+
+/**
+ * Hide floating point error in the position and rotation of 3D sprites, e.g. 0.30000000000000004 after adding 0.1s,
+ * like the 3D motion reporters do.
+ * @param {number} value
+ * @returns {number} value, rounded if it is very close to 6 decimals
+ */
+runtimeFunctions.limitPrecision3D = `const limitPrecision3D = value => {
+    const rounded = Math.round(value * 1e6) / 1e6;
+    return Math.abs(value - rounded) < 1e-9 ? rounded : value;
 }`;
 
 /**
@@ -651,6 +690,24 @@ const scopedEval = source => {
 
 execute.scopedEval = scopedEval;
 execute.runtimeFunctions = runtimeFunctions;
+/**
+ * Run compiled code for a thread outside of the thread's own compiled script, e.g. a custom block of another sprite
+ * called from the interpreter (engine/cross-call.js).
+ * @param {import("../engine/thread")} thread the thread the code runs in
+ * @param {function(): *} fn runs the code
+ * @returns {*} what fn returns
+ */
+const runInThread = (thread, fn) => {
+    saveGlobalState();
+    globalState.thread = thread;
+    try {
+        return fn();
+    } finally {
+        restoreGlobalState();
+    }
+};
+
+execute.runInThread = runInThread;
 execute.saveGlobalState = saveGlobalState;
 execute.restoreGlobalState = restoreGlobalState;
 

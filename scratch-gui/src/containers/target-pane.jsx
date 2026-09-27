@@ -24,13 +24,23 @@ import randomizeSpritePosition from '../lib/randomize-sprite-position';
 import downloadBlob from '../lib/download-blob';
 import log from '../lib/log';
 import {placeInViewport} from '../lib/backpack/code-payload.js';
+import Add3DSpriteModal from '../components/tw-3d/add-3d-sprite-modal.jsx';
+import {DEFAULT_SHAPE_COLOR, MODEL_FILE, modelNameFromFile} from '../components/tw-3d/shapes.js';
 
 class TargetPane extends React.Component {
     constructor (props) {
         super(props);
         bindAll(this, [
             'handleActivateBlocksTab',
+            'handleAdd3DShape',
+            'handleAddCamera',
+            'handleChoose3DModelFile',
+            'handleClose3DSpriteModal',
+            'handleNewCanvasSprite',
+            'handleOpen3DSpriteModal',
+            'handleUpload3DModels',
             'handleBlockDragEnd',
+            'handleChangeSprite3D',
             'handleChangeSpriteRotationStyle',
             'handleChangeSpriteDirection',
             'handleChangeSpriteName',
@@ -50,12 +60,18 @@ class TargetPane extends React.Component {
             'handleSpriteUpload',
             'setFileInput'
         ]);
+        this.state = {
+            add3DSpriteVisible: false
+        };
     }
     componentDidMount () {
         this.props.vm.addListener('BLOCK_DRAG_END', this.handleBlockDragEnd);
     }
     componentWillUnmount () {
         this.props.vm.removeListener('BLOCK_DRAG_END', this.handleBlockDragEnd);
+    }
+    handleChangeSprite3D (data) {
+        this.props.vm.postSpriteInfo(data);
     }
     handleChangeSpriteDirection (direction) {
         this.props.vm.postSpriteInfo({direction});
@@ -128,6 +144,72 @@ class TargetPane extends React.Component {
                 this.props.onActivateTab(COSTUMES_TAB_INDEX);
             });
         });
+    }
+    handleNewCanvasSprite () {
+        this.props.vm.addCanvasSprite()
+            .then(this.handleActivateBlocksTab)
+            .catch(err => {
+                log.error(err);
+            });
+    }
+    handleOpen3DSpriteModal () {
+        this.setState({add3DSpriteVisible: true});
+    }
+    handleClose3DSpriteModal () {
+        this.setState({add3DSpriteVisible: false});
+    }
+    add3DSprite (options) {
+        this.setState({add3DSpriteVisible: false});
+        return this.props.vm.addSprite3D(options)
+            .then(this.handleActivateBlocksTab)
+            .catch(err => {
+                log.error(err);
+            });
+    }
+    handleAddCamera () {
+        this.setState({add3DSpriteVisible: false});
+        return this.props.vm.addCamera()
+            .then(this.handleActivateBlocksTab)
+            .catch(err => {
+                log.error(err);
+            });
+    }
+    handleAdd3DShape (shape, name) {
+        return this.add3DSprite({
+            name,
+            models: [{name, shape}],
+            material: {color: DEFAULT_SHAPE_COLOR}
+        });
+    }
+    handleChoose3DModelFile (fileName) {
+        const name = modelNameFromFile(fileName);
+        return this.add3DSprite({
+            name,
+            models: [{name, file: fileName}],
+            // Models keep their own colors
+            material: {color: '#ffffff'}
+        });
+    }
+    async handleUpload3DModels (files) {
+        const fileManager = this.props.vm.runtime.fileManager;
+        const modelFiles = [];
+        try {
+            // Files that .gltf models use (buffers, textures) can be uploaded together with them
+            for (const file of files) {
+                const savedName = fileManager.addFile(file.name, await file.arrayBuffer());
+                if (MODEL_FILE.test(savedName)) modelFiles.push(savedName);
+            }
+        } catch (err) {
+            log.error(err);
+            alert(`無法讀取檔案：${err}`); // eslint-disable-line no-alert
+        }
+        if (modelFiles.length === 0) {
+            this.handleClose3DSpriteModal();
+            return;
+        }
+        for (const fileName of modelFiles) {
+            await this.handleChoose3DModelFile(fileName);
+        }
     }
     handleActivateBlocksTab () {
         this.props.onActivateTab(BLOCKS_TAB_INDEX);
@@ -226,27 +308,42 @@ class TargetPane extends React.Component {
         } = this.props;
         /* eslint-enable no-unused-vars */
         return (
-            <TargetPaneComponent
-                {...componentProps}
-                fileInputRef={this.setFileInput}
-                onActivateBlocksTab={this.handleActivateBlocksTab}
-                onChangeSpriteDirection={this.handleChangeSpriteDirection}
-                onChangeSpriteName={this.handleChangeSpriteName}
-                onChangeSpriteRotationStyle={this.handleChangeSpriteRotationStyle}
-                onChangeSpriteSize={this.handleChangeSpriteSize}
-                onChangeSpriteVisibility={this.handleChangeSpriteVisibility}
-                onChangeSpriteX={this.handleChangeSpriteX}
-                onChangeSpriteY={this.handleChangeSpriteY}
-                onDeleteSprite={this.handleDeleteSprite}
-                onDrop={this.handleDrop}
-                onDuplicateSprite={this.handleDuplicateSprite}
-                onExportSprite={this.handleExportSprite}
-                onFileUploadClick={this.handleFileUploadClick}
-                onPaintSpriteClick={this.handlePaintSpriteClick}
-                onSelectSprite={this.handleSelectSprite}
-                onSpriteUpload={this.handleSpriteUpload}
-                onSurpriseSpriteClick={this.handleSurpriseSpriteClick}
-            />
+            <React.Fragment>
+                <TargetPaneComponent
+                    {...componentProps}
+                    fileInputRef={this.setFileInput}
+                    onNew3DSpriteClick={this.handleOpen3DSpriteModal}
+                    onNewCanvasSpriteClick={this.handleNewCanvasSprite}
+                    onActivateBlocksTab={this.handleActivateBlocksTab}
+                    onChangeSprite3D={this.handleChangeSprite3D}
+                    onChangeSpriteDirection={this.handleChangeSpriteDirection}
+                    onChangeSpriteName={this.handleChangeSpriteName}
+                    onChangeSpriteRotationStyle={this.handleChangeSpriteRotationStyle}
+                    onChangeSpriteSize={this.handleChangeSpriteSize}
+                    onChangeSpriteVisibility={this.handleChangeSpriteVisibility}
+                    onChangeSpriteX={this.handleChangeSpriteX}
+                    onChangeSpriteY={this.handleChangeSpriteY}
+                    onDeleteSprite={this.handleDeleteSprite}
+                    onDrop={this.handleDrop}
+                    onDuplicateSprite={this.handleDuplicateSprite}
+                    onExportSprite={this.handleExportSprite}
+                    onFileUploadClick={this.handleFileUploadClick}
+                    onPaintSpriteClick={this.handlePaintSpriteClick}
+                    onSelectSprite={this.handleSelectSprite}
+                    onSpriteUpload={this.handleSpriteUpload}
+                    onSurpriseSpriteClick={this.handleSurpriseSpriteClick}
+                />
+                {this.state.add3DSpriteVisible ? (
+                    <Add3DSpriteModal
+                        vm={this.props.vm}
+                        onAddCamera={this.handleAddCamera}
+                        onAddShape={this.handleAdd3DShape}
+                        onChooseFile={this.handleChoose3DModelFile}
+                        onClose={this.handleClose3DSpriteModal}
+                        onUploadModels={this.handleUpload3DModels}
+                    />
+                ) : null}
+            </React.Fragment>
         );
     }
 }

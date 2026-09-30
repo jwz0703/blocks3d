@@ -7,6 +7,7 @@
     display: flex;
     align-items: center;
     min-width: 0;
+    margin-left: 0.75rem;
     overflow: hidden;
     user-select: none;
 }
@@ -15,11 +16,12 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
+    gap: 0.25rem;
 }
 
 .group + .group {
-    margin-left: 0.25rem;
-    padding-left: 0.25rem;
+    margin-left: 0.5rem;
+    padding-left: 0.5rem;
     border-left: 1px solid $ui-black-transparent;
 }
 

@@ -31,7 +31,7 @@ jobs:
         working-directory: scratch-render
       - run: npm install --no-audit --no-fund
         working-directory: scratch-paint
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
         working-directory: scratch-gui
       # Project pages live under /<repo>/, so assets need that prefix.
       - run: npx webpack --bail

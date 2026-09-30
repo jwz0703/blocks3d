@@ -24,8 +24,8 @@ jobs:
           node-version: 22
       # scratch-gui depends on the sibling packages through file: links,
       # so each one needs its own node_modules.
-      # scratch-render and scratch-paint have no lockfile, so use install.
-      - run: npm ci
+      # The lockfiles of vm/render/paint are missing or out of sync, so use install.
+      - run: npm install --no-audit --no-fund
         working-directory: scratch-vm
       - run: npm install --no-audit --no-fund
         working-directory: scratch-render

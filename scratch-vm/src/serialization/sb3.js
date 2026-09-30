@@ -593,6 +593,8 @@ const serializeTarget = function (target, extensions) {
         obj.size = target.size;
         obj.direction = target.direction;
         obj.draggable = target.draggable;
+        // Blocks3D: only written when not 'auto', like before there was the setting
+        if (target.mouseMode && target.mouseMode !== 'auto') obj.mouseMode = target.mouseMode;
         obj.rotationStyle = target.rotationStyle;
     }
 
@@ -684,7 +686,8 @@ const serialize = function (runtime, targetId, {allowOptimization = true} = {}) 
 
     const originalTargetsToSerialize = targetId ?
         [runtime.getTargetById(targetId)] :
-        runtime.targets.filter(target => target.isOriginal);
+        // Members of components are part of the components (serialization/3dsb.js)
+        runtime.targets.filter(target => target.isOriginal && !target.componentOwner && !target.isPreview);
 
     const layerOrdering = getSimplifiedLayerOrdering(originalTargetsToSerialize);
 
@@ -1337,6 +1340,12 @@ const parseScratchObject = function (object, runtime, extensions, zip, assets) {
     if (Object.prototype.hasOwnProperty.call(object, 'draggable')) {
         target.draggable = object.draggable;
     }
+    if (['pass', 'block'].includes(object.mouseMode)) {
+        target.mouseMode = object.mouseMode;
+    } else if (object.clickable === false) {
+        // Saved before there was 'auto': "can be clicked: off"
+        target.mouseMode = 'pass';
+    }
     if (Object.prototype.hasOwnProperty.call(object, 'extensionStorage')) {
         target.extensionStorage = object.extensionStorage;
     }
@@ -1629,6 +1638,7 @@ module.exports = {
     deserialize: deserialize,
     deserializeBlocks: deserializeBlocks,
     serializeBlocks: serializeBlocks,
+    serializeTarget: serializeTarget,
     deserializeStandaloneBlocks: deserializeStandaloneBlocks,
     serializeStandaloneBlocks: serializeStandaloneBlocks,
     getExtensionIdForOpcode: getExtensionIdForOpcode

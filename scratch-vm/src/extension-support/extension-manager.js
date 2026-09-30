@@ -33,13 +33,20 @@ const defaultBuiltinExtensions = {
     sensing3d: () => require('../extensions/tw_3d/sensing'),
     camera3d: () => require('../extensions/tw_3d/camera'),
     environment3d: () => require('../extensions/tw_3d/environment'),
+    skyprocedural: () => require('../extensions/tw_3d/sky-procedural'),
+    skycolor: () => require('../extensions/tw_3d/sky-color'),
+    skyhdri: () => require('../extensions/tw_3d/sky-hdri'),
     physics3d: () => require('../extensions/tw_3d/physics'),
     event3d: () => require('../extensions/tw_3d/events'),
     sound3d: () => require('../extensions/tw_3d/sound'),
     twfiles: () => require('../extensions/tw_files'),
     screen: () => require('../extensions/tw_screen'),
+    twmouse: () => require('../extensions/tw_mouse'),
+    twmath: () => require('../extensions/tw_math'),
     twdata: () => require('../extensions/tw_data'),
     twclonevars: () => require('../extensions/tw_clone_vars'),
+    twiface: () => require('../extensions/tw_interface'),
+    twcomp: () => require('../extensions/tw_components'),
     twlocalvars: () => require('../extensions/tw_local_vars'),
     // In the extension library
     twvector: () => require('../extensions/tw_vector'),
@@ -471,7 +478,12 @@ class ExtensionManager {
                 const menuItemFunctionName = menuInfo.items;
                 const serviceObject = dispatch.services[serviceName];
                 // Bind the function here so we can pass a simple item generation function to Scratch Blocks later.
-                menuInfo.items = this._getExtensionMenuItems.bind(this, serviceObject, menuItemFunctionName);
+                // scratch-blocks calls it with the field as `this`: the menu function gets the block too, so that a
+                // menu can depend on another field of the block
+                const manager = this;
+                menuInfo.items = function () {
+                    return manager._getExtensionMenuItems(serviceObject, menuItemFunctionName, this);
+                };
             }
         }
         return menus;
@@ -484,7 +496,7 @@ class ExtensionManager {
      * @returns {Array} menu items ready for scratch-blocks.
      * @private
      */
-    _getExtensionMenuItems (extensionObject, menuItemFunctionName) {
+    _getExtensionMenuItems (extensionObject, menuItemFunctionName, field) {
         // Fetch the items appropriate for the target currently being edited. This assumes that menus only
         // collect items when opened by the user while editing a particular target.
         const editingTarget = this.runtime.getEditingTarget() || this.runtime.getTargetForStage();
@@ -493,7 +505,8 @@ class ExtensionManager {
 
         // TODO: Fix this to use dispatch.call when extensions are running in workers.
         const menuFunc = extensionObject[menuItemFunctionName];
-        const menuItems = menuFunc.call(extensionObject, editingTargetID).map(
+        const block = field && field.sourceBlock_ ? field.sourceBlock_ : null;
+        const menuItems = menuFunc.call(extensionObject, editingTargetID, block).map(
             item => {
                 item = maybeFormatMessage(item, extensionMessageContext);
                 switch (typeof item) {

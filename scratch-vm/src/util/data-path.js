@@ -470,7 +470,12 @@ const interpreterLocals = thread => {
  * @returns {?Target} the target that owns the variables of that scope
  */
 const ownerOf = (scope, target) => {
-    if (scope === 'global') return target.runtime ? target.runtime.getTargetForStage() : null;
+    if (scope === 'global') {
+        if (!target.runtime) return null;
+        // In a component the globals are those of its root, not the project's
+        const root = target.runtime.components && target.runtime.components.globalOwner(target);
+        return root || target.runtime.getTargetForStage();
+    }
     return target;
 };
 

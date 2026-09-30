@@ -6,6 +6,11 @@ const {CAMERA, ANY, MOUSE, get3DSpriteItems, get3DSprite} = require('./common');
 
 const MYSELF = '_myself_';
 
+// What "[property] set to" can set
+const MATERIAL_PROPERTIES = ['mass', 'bounce', 'friction', 'linearDamping', 'angularDamping'];
+
+const round6 = n => Math.round(n * 1e6) / 1e6;
+
 // How far rays go when a block doesn't say
 const DEFAULT_RAY_LENGTH = 100;
 
@@ -24,7 +29,7 @@ const hitResult = hit => (hit ? {
 
 /**
  * Collision and physics blocks of 3D sprites (ROADMAP.md 6.1 and 6.7), with Rapier (see engine/scene-3d-physics.js).
- * Raycasts and gravity work for every target; the rest only for 3D sprites (see block-support.js).
+ * Raycasts, gravity and showing colliders work for every target; the rest only for 3D sprites (see block-support.js).
  */
 class Scratch3Physics3DBlocks {
     constructor (runtime) {
@@ -70,6 +75,38 @@ class Scratch3Physics3DBlocks {
                     }
                 },
                 {
+                    opcode: 'setcollide',
+                    blockType: BlockType.COMMAND,
+                    text: '參與碰撞 [ON]',
+                    arguments: {
+                        ON: {type: ArgumentType.STRING, menu: 'onOff', defaultValue: 'off'}
+                    }
+                },
+                {
+                    opcode: 'setcollidehidden',
+                    blockType: BlockType.COMMAND,
+                    text: '隱藏時也能碰撞 [ON]',
+                    arguments: {
+                        ON: {type: ArgumentType.STRING, menu: 'onOff', defaultValue: 'on'}
+                    }
+                },
+                {
+                    opcode: 'setgroup',
+                    blockType: BlockType.COMMAND,
+                    text: '碰撞群組設為 [GROUP]',
+                    arguments: {GROUP: number(2)}
+                },
+                {
+                    opcode: 'setgroupscollide',
+                    blockType: BlockType.COMMAND,
+                    text: '群組 [A] 和群組 [B] [COLLIDE] 互相碰撞',
+                    arguments: {
+                        A: number(1),
+                        B: number(2),
+                        COLLIDE: {type: ArgumentType.STRING, menu: 'collide', defaultValue: 'no'}
+                    }
+                },
+                {
                     opcode: 'setrotationlock',
                     blockType: BlockType.COMMAND,
                     text: '[LOCK] 旋轉',
@@ -105,6 +142,33 @@ class Scratch3Physics3DBlocks {
                         AXIS: {type: ArgumentType.STRING, menu: 'axis', defaultValue: 'y'}
                     }
                 },
+                {
+                    opcode: 'applytorque',
+                    blockType: BlockType.COMMAND,
+                    text: '施加扭力 x:[X] y:[Y] z:[Z]',
+                    arguments: {X: number(0), Y: number(1), Z: number(0)}
+                },
+                {
+                    opcode: 'applytorqueimpulse',
+                    blockType: BlockType.COMMAND,
+                    text: '施加扭力衝量 x:[X] y:[Y] z:[Z]',
+                    arguments: {X: number(0), Y: number(1), Z: number(0)}
+                },
+                {
+                    opcode: 'setangularvelocity',
+                    blockType: BlockType.COMMAND,
+                    text: '角速度設為 x:[X] y:[Y] z:[Z] 度/秒',
+                    arguments: {X: number(0), Y: number(90), Z: number(0)}
+                },
+                {
+                    opcode: 'angularvelocity',
+                    blockType: BlockType.REPORTER,
+                    text: '角速度 [AXIS]',
+                    disableMonitor: true,
+                    arguments: {
+                        AXIS: {type: ArgumentType.STRING, menu: 'axis', defaultValue: 'y'}
+                    }
+                },
                 '---',
                 {
                     opcode: 'whencollisionstart',
@@ -122,6 +186,15 @@ class Scratch3Physics3DBlocks {
                     isEdgeActivated: false,
                     arguments: {
                         TARGET: {type: ArgumentType.STRING, menu: 'collisionTarget', defaultValue: ANY}
+                    }
+                },
+                {
+                    opcode: 'collision',
+                    blockType: BlockType.REPORTER,
+                    text: '碰撞的 [INFO]',
+                    disableMonitor: true,
+                    arguments: {
+                        INFO: {type: ArgumentType.STRING, menu: 'collisionInfo', defaultValue: 'speed'}
                     }
                 },
                 '---',
@@ -161,6 +234,15 @@ class Scratch3Physics3DBlocks {
                     arguments: {
                         AXIS: {type: ArgumentType.STRING, menu: 'axis', defaultValue: 'y'}
                     }
+                },
+                '---',
+                {
+                    opcode: 'showcolliders',
+                    blockType: BlockType.COMMAND,
+                    text: '[SHOW] 碰撞形狀',
+                    arguments: {
+                        SHOW: {type: ArgumentType.STRING, menu: 'show', defaultValue: 'show'}
+                    }
                 }
             ],
             menus: {
@@ -176,7 +258,11 @@ class Scratch3Physics3DBlocks {
                     acceptReporters: true,
                     items: [
                         {text: '包圍盒', value: 'box'},
-                        {text: '包圍球', value: 'sphere'}
+                        {text: '包圍球', value: 'sphere'},
+                        {text: '膠囊', value: 'capsule'},
+                        {text: '圓柱', value: 'cylinder'},
+                        {text: '凸包', value: 'hull'},
+                        {text: '網格（精確）', value: 'mesh'}
                     ]
                 },
                 material: {
@@ -184,7 +270,42 @@ class Scratch3Physics3DBlocks {
                     items: [
                         {text: '質量', value: 'mass'},
                         {text: '彈性', value: 'bounce'},
-                        {text: '摩擦力', value: 'friction'}
+                        {text: '摩擦力', value: 'friction'},
+                        {text: '移動阻尼', value: 'linearDamping'},
+                        {text: '轉動阻尼', value: 'angularDamping'}
+                    ]
+                },
+                onOff: {
+                    acceptReporters: false,
+                    items: [
+                        {text: '開', value: 'on'},
+                        {text: '關', value: 'off'}
+                    ]
+                },
+                collide: {
+                    acceptReporters: false,
+                    items: [
+                        {text: '會', value: 'yes'},
+                        {text: '不會', value: 'no'}
+                    ]
+                },
+                collisionInfo: {
+                    acceptReporters: false,
+                    items: [
+                        {text: '撞擊速度', value: 'speed'},
+                        {text: '衝量', value: 'impulse'},
+                        {text: '位置 x', value: 'x'},
+                        {text: '位置 y', value: 'y'},
+                        {text: '位置 z', value: 'z'},
+                        {text: '對象', value: 'sprite'},
+                        {text: '對象的分身 id', value: 'id'}
+                    ]
+                },
+                show: {
+                    acceptReporters: false,
+                    items: [
+                        {text: '顯示', value: 'show'},
+                        {text: '隱藏', value: 'hide'}
                     ]
                 },
                 lock: {
@@ -235,8 +356,28 @@ class Scratch3Physics3DBlocks {
     }
 
     setmaterial (args, util) {
-        if (!['mass', 'bounce', 'friction'].includes(args.PROPERTY)) return;
+        if (!MATERIAL_PROPERTIES.includes(args.PROPERTY)) return;
         this.physics.setSettings(util.target, {[args.PROPERTY]: Cast.toNumber(args.VALUE)});
+    }
+
+    showcolliders (args) {
+        this.runtime.scene3D.colliderView.setShown(args.SHOW === 'show');
+    }
+
+    setcollide (args, util) {
+        this.physics.setSettings(util.target, {collide: args.ON !== 'off'});
+    }
+
+    setcollidehidden (args, util) {
+        this.physics.setSettings(util.target, {collideHidden: args.ON === 'on'});
+    }
+
+    setgroup (args, util) {
+        this.physics.setSettings(util.target, {group: Cast.toNumber(args.GROUP)});
+    }
+
+    setgroupscollide (args) {
+        this.physics.setGroupsCollide(Cast.toNumber(args.A), Cast.toNumber(args.B), args.COLLIDE !== 'no');
     }
 
     setrotationlock (args, util) {
@@ -266,6 +407,48 @@ class Scratch3Physics3DBlocks {
         if (!['x', 'y', 'z'].includes(args.AXIS)) return 0;
         const value = this.physics.getVelocity(util.target)[args.AXIS];
         return Math.round(value * 1e6) / 1e6;
+    }
+
+    applytorque (args, util) {
+        const torque = this._vector(args);
+        return this.physics.whenReady(() => this.physics.applyTorque(util.target, torque));
+    }
+
+    applytorqueimpulse (args, util) {
+        const impulse = this._vector(args);
+        return this.physics.whenReady(() => this.physics.applyTorqueImpulse(util.target, impulse));
+    }
+
+    setangularvelocity (args, util) {
+        const velocity = this._vector(args);
+        return this.physics.whenReady(() => this.physics.setAngularVelocity(util.target, velocity));
+    }
+
+    angularvelocity (args, util) {
+        if (!['x', 'y', 'z'].includes(args.AXIS)) return 0;
+        return round6(this.physics.getAngularVelocity(util.target)[args.AXIS]);
+    }
+
+    /**
+     * In a "when collided" script: the collision that started it. Elsewhere: the sprite's last collision.
+     * @param {object} args INFO: speed, impulse, x, y, z, sprite or id
+     * @param {object} util
+     * @returns {number|string} that about the collision; 0 or '' if there was none
+     */
+    collision (args, util) {
+        const collision = (util.thread && util.thread.collision3D) || util.target.lastCollision3D;
+        if (args.INFO === 'sprite') return collision ? collision.other.getName() : '';
+        if (!collision) return 0;
+        switch (args.INFO) {
+        case 'speed': return round6(collision.speed);
+        case 'impulse': return round6(collision.impulse);
+        case 'x': case 'y': case 'z': return round6(collision.point[args.INFO]);
+        case 'id': {
+            const other = collision.other;
+            return other.isOriginal || other.cloneId === void 0 ? 0 : other.cloneId;
+        }
+        }
+        return 0;
     }
 
     /**

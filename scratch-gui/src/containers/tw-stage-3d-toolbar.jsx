@@ -128,6 +128,10 @@ const ICONS = {
     grid: icon(
         <path d="M1.5 5.5h13M1.5 10.5h13M5.5 1.5v13M10.5 1.5v13" />
     ),
+    // Wireframe cube: colliders
+    colliders: icon(
+        <path d="M8 1.5l5.5 3v7L8 14.5l-5.5-3v-7zM2.5 4.5L8 7.5l5.5-3M8 7.5v7" />
+    ),
     // Speedometer: the performance panel
     stats: icon(
         <path d="M2.5 12a5.5 5.5 0 1 1 11 0M8 12l2.5-3.5M1.5 12h1M13.5 12h1" />
@@ -152,6 +156,7 @@ class Stage3DToolbar extends React.Component {
             'handleEditorChanged',
             'handleToggleCamera',
             'handleToggleHelpers',
+            'handleToggleColliders',
             'handleToggleStats',
             'handleResetCamera',
             'handleAlignCamera',
@@ -182,6 +187,9 @@ class Stage3DToolbar extends React.Component {
     }
     handleToggleHelpers () {
         this.editor.setHelpersVisible(!this.state.helpersVisible);
+    }
+    handleToggleColliders () {
+        this.editor.setCollidersVisible(!this.state.collidersVisible);
     }
     handleToggleStats () {
         this.editor.setStatsVisible(!this.state.statsVisible);
@@ -293,6 +301,13 @@ class Stage3DToolbar extends React.Component {
                         '顯示格線和座標軸',
                         this.handleToggleHelpers,
                         this.state.helpersVisible
+                    ) : null}
+                    {editing ? this.renderButton(
+                        'colliders',
+                        '顯示碰撞形狀（綠色：運動學、藍色：靜態、橘色：動態）。' +
+                            '只有編輯視角看得到，執行中要看的話用物理分類的「顯示碰撞形狀」積木',
+                        this.handleToggleColliders,
+                        this.state.collidersVisible
                     ) : null}
                     {this.renderButton(
                         'stats',

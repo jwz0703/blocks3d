@@ -1,0 +1,60 @@
+@import "../../css/colors.css";
+@import "../../css/units.css";
+
+.modal-content {
+    max-width: 520px;
+    margin-top: 80px;
+}
+
+.body {
+    background: $ui-white;
+    color: $text-primary;
+    padding: 1rem 1.5rem 1.5rem;
+}
+
+.files {
+    margin: 0 0 1rem;
+    font-size: 0.875rem;
+    word-break: break-all;
+}
+
+.choices {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.choice {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    padding: 0.75rem;
+    border: 1px solid $ui-black-transparent;
+    border-radius: $space;
+    background: $ui-white;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.choice:hover,
+.suggested {
+    border-color: $looks-secondary;
+    box-shadow: 0 0 0 2px $looks-transparent;
+}
+
+.choice-name {
+    font-weight: bold;
+}
+
+.choice-description {
+    font-size: 0.75rem;
+    opacity: 0.75;
+}
+
+.suggestion {
+    font-size: 0.75rem;
+    color: $looks-secondary;
+}

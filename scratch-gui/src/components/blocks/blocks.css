@@ -123,3 +123,10 @@
 .unsupported-block {
     opacity: 0.4;
 }
+
+/* Blocks that name a sprite or instance of a component that isn't there (any more): they stay and do nothing */
+.missing-reference > path:first-of-type {
+    fill: #9aa1ad;
+    stroke: #d32f2f;
+    stroke-width: 2px;
+}

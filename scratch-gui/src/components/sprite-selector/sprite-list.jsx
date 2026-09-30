@@ -41,7 +41,8 @@ const SpriteList = function (props) {
         ordering,
         raised,
         selectedId,
-        items
+        items,
+        leadingItem
     } = props;
 
     const isSpriteDrag = draggingType === DragConstants.SPRITE;
@@ -56,6 +57,7 @@ const SpriteList = function (props) {
             <Box
                 className={styles.itemsWrapper}
             >
+                {leadingItem ? <div className={styles.spriteWrapper}>{leadingItem}</div> : null}
                 {items.map((sprite, index) => {
 
                     // If the sprite has just received a block drop, used for green highlight
@@ -99,6 +101,7 @@ const SpriteList = function (props) {
                                 id={sprite.id}
                                 index={index}
                                 key={sprite.id}
+                                componentName={sprite.componentName || void 0}
                                 model3D={get3DModelKey(sprite)}
                                 name={sprite.name}
                                 selected={sprite.id === selectedId}
@@ -116,6 +119,8 @@ const SpriteList = function (props) {
 };
 
 SpriteList.propTypes = {
+    // Before the sprites, not sortable (返回 in the component mode)
+    leadingItem: PropTypes.node,
     containerRef: PropTypes.func,
     draggingIndex: PropTypes.number,
     draggingType: PropTypes.oneOf(Object.keys(DragConstants)),

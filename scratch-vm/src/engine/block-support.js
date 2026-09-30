@@ -117,12 +117,14 @@ const PREFIXES_3D = {
     pen_: hide()
 };
 
-// Blocks that every target can use: raycasts and gravity
+// Blocks that every target can use: raycasts, gravity, which collision groups collide and showing colliders
 const PHYSICS_FOR_EVERYONE = {
     physics3d_raycast: entry(KEEP),
     physics3d_raycastfrom: entry(KEEP),
     physics3d_setgravity: entry(KEEP),
-    physics3d_gravity: entry(KEEP)
+    physics3d_setgroupscollide: entry(KEEP),
+    physics3d_gravity: entry(KEEP),
+    physics3d_showcolliders: entry(KEEP)
 };
 
 // Blocks that only camera sprites have: their field of view
@@ -151,6 +153,9 @@ const BLOCKS_CAMERA = Object.assign({}, BLOCKS_3D, {
     control_start_as_clone: hide(),
     control_delete_this_clone: hide(),
     event_whenthisspriteclicked: hide(),
+    twmouse_whentapped: hide(),
+    twmouse_setclickable: hide(),
+    twmouse_setmousemode: hide(),
     camera3d_setfov: entry(KEEP),
     camera3d_changefov: entry(KEEP),
     camera3d_fov: entry(KEEP),

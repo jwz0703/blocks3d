@@ -77,6 +77,18 @@ class Scratch3Motion3DBlocks {
                         DEGREES: number(0)
                     }
                 },
+                {
+                    opcode: 'rotatearound',
+                    blockType: BlockType.COMMAND,
+                    text: '繞 [SPACE] 軸 x:[X] y:[Y] z:[Z] 轉 [DEGREES] 度',
+                    arguments: {
+                        SPACE: {type: ArgumentType.STRING, menu: 'space', defaultValue: 'world'},
+                        X: number(0),
+                        Y: number(1),
+                        Z: number(0),
+                        DEGREES: number(15)
+                    }
+                },
                 '---',
                 {
                     opcode: 'gotoxyz',
@@ -202,6 +214,13 @@ class Scratch3Motion3DBlocks {
                 {opcode: 'roll', blockType: BlockType.REPORTER, text: 'roll'}
             ],
             menus: {
+                space: {
+                    acceptReporters: false,
+                    items: [
+                        {text: '世界的', value: 'world'},
+                        {text: '自己的', value: 'local'}
+                    ]
+                },
                 axis: {
                     acceptReporters: false,
                     items: ['x', 'y', 'z']
@@ -306,6 +325,11 @@ class Scratch3Motion3DBlocks {
 
     setangle (args, util) {
         this._setAngle(util.target, args.ANGLE, Cast.toNumber(args.DEGREES));
+    }
+
+    rotatearound (args, util) {
+        util.target.rotateAround({x: Cast.toNumber(args.X), y: Cast.toNumber(args.Y), z: Cast.toNumber(args.Z)},
+            Cast.toNumber(args.DEGREES), args.SPACE === 'local');
     }
 
     gotoxyz (args, util) {

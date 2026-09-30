@@ -3,6 +3,7 @@ const {test} = require('tap');
 require('../fixtures/tw_mock_blob');
 const fs = require('fs');
 const pathUtil = require('path');
+const THREE = require('three');
 const VirtualMachine = require('../../src/virtual-machine');
 const SpatialAudioEffect = require('../../src/engine/spatial-audio-effect');
 const makeTestStorage = require('../fixtures/make-test-storage');
@@ -110,6 +111,168 @@ test('raycasts report what they hit as an object', async t => {
     // The camera at (0, 0, 5) looks at the box
     const fromCamera = await call(vm, 'physics3d_raycast', {FROM: '_camera_', LENGTH: 100}, box);
     t.same([fromCamera.sprite, round(fromCamera.distance)], ['Box', 4.5]);
+    t.end();
+});
+
+test('capsule, hull and mesh colliders follow the model', async t => {
+    const {vm, physics, box, other} = await makeVM();
+    await vm.addSprite3D({name: 'Ring', models: [{name: 'ring', shape: 'torus'}]});
+    const ring = vm.runtime.targets.find(target => target.getName() === 'Ring');
+    ring.setXYZ(0, 0, 0);
+    other.setXYZ(10, 0, 0);
+    await physics.load();
+    const touching = name => call(vm, 'sensing3d_touching', {TARGET: name}, box);
+
+    // A small box in the ring's hole (the ring lies in the xy plane, 1.1 wide, its hole 0.5 wide)
+    box.setScale(0.2, 0.2, 0.2);
+    t.equal(touching('Ring'), true, 'inside the ring\'s bounding box');
+    call(vm, 'physics3d_setshape', {SHAPE: 'hull'}, ring);
+    t.equal(touching('Ring'), true, 'a convex hull fills the hole');
+    call(vm, 'physics3d_setshape', {SHAPE: 'mesh'}, ring);
+    t.equal(touching('Ring'), false, 'a mesh has the hole');
+    box.setXYZ(0.3, 0, 0);
+    t.equal(touching('Ring'), true, 'and touches the ring itself');
+    ring.setScale(2, 2, 2);
+    t.equal(touching('Ring'), false, 'scaled with the sprite: the hole is 1 wide now');
+    ring.setScale(1, 1, 1);
+
+    const down = () => call(vm, 'physics3d_raycastfrom', {
+        ORIGIN: '{"x": 0, "y": 0, "z": 5}',
+        DIRECTION: {x: 0, y: 0, z: -1},
+        LENGTH: 100
+    }, other);
+    box.setXYZ(0, 10, 0);
+    t.equal((await down()).hit, false, 'rays go through the hole of a mesh');
+    call(vm, 'physics3d_setshape', {SHAPE: 'hull'}, ring);
+    t.same([(await down()).sprite, round((await down()).distance)], ['Ring', 4.85], 'and hit its hull');
+
+    // A capsule stands up, with round ends
+    box.setScale(1, 3, 1);
+    box.setXYZ(0, 0, 0);
+    ring.setXYZ(10, 0, 0);
+    other.setScale(0.05, 0.05, 0.05);
+    other.setXYZ(0.45, 1.45, 0);
+    t.equal(touching('Other'), true, 'the box\'s corner');
+    call(vm, 'physics3d_setshape', {SHAPE: 'capsule'}, box);
+    t.equal(touching('Other'), false, 'a capsule has no corners');
+    other.setXYZ(0, 1.45, 0);
+    t.equal(touching('Other'), true, 'but reaches as high');
+    t.end();
+});
+
+test('dynamic mesh colliders are made of convex pieces and land on meshes', async t => {
+    const {vm, physics, box, other} = await makeVM();
+    await vm.addSprite3D({name: 'Ring', models: [{name: 'ring', shape: 'torus'}]});
+    const ring = vm.runtime.targets.find(target => target.getName() === 'Ring');
+    await physics.load();
+
+    // A wide floor, and the ring standing on its edge above it
+    box.setXYZ(10, 0, 0);
+    other.setXYZ(0, -1, 0);
+    other.setScale(20, 1, 20);
+    call(vm, 'physics3d_setshape', {SHAPE: 'mesh'}, other);
+    call(vm, 'physics3d_setbody', {BODY: 'static'}, other);
+    ring.setXYZ(0, 2, 0);
+    call(vm, 'physics3d_setshape', {SHAPE: 'mesh'}, ring);
+    call(vm, 'physics3d_setbody', {BODY: 'dynamic'}, ring);
+    call(vm, 'physics3d_setrotationlock', {LOCK: 'lock'}, ring);
+    t.match(physics.getShape(ring).key, /^pieces /, 'convex pieces');
+    t.match(physics.getShape(other).key, /^mesh /, 'static meshes stay exact');
+
+    vm.greenFlag();
+    for (let i = 0; i < 180; i++) physics.step(1 / 60);
+    t.equal(Math.round(ring.y * 10) / 10, 0.1, 'rests on its edge (0.55 below its center) on the floor\'s top');
+    t.end();
+});
+
+test('mesh colliders of GLTF models are turned like the model', async t => {
+    const {vm, physics, box, other} = await makeVM();
+    await physics.load();
+    // One triangle on the +x side, which ends up on the -x side: the model is turned to face the sprite's front
+    const positions = Buffer.from(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]).buffer);
+    const triangle = {
+        asset: {version: '2.0'},
+        scene: 0,
+        scenes: [{nodes: [0]}],
+        nodes: [{mesh: 0}],
+        meshes: [{primitives: [{attributes: {POSITION: 0}}]}],
+        buffers: [{
+            byteLength: positions.length,
+            uri: `data:application/octet-stream;base64,${positions.toString('base64')}`
+        }],
+        bufferViews: [{buffer: 0, byteOffset: 0, byteLength: positions.length}],
+        accessors: [{bufferView: 0, componentType: 5126, count: 3, type: 'VEC3', min: [0, 0, 0], max: [1, 1, 0]}]
+    };
+    vm.runtime.fileManager.addFile('triangle.gltf', new TextEncoder().encode(JSON.stringify(triangle)));
+    box.addModel({name: 'triangle', file: 'triangle.gltf'});
+    box.setModel(1);
+    call(vm, 'physics3d_setshape', {SHAPE: 'mesh'}, box);
+    t.match(physics.getShape(box).key, /^box /, 'a box while the model loads');
+    await vm.runtime.scene3D.getModel('triangle.gltf');
+    t.match(physics.getShape(box).key, /^mesh file:/);
+
+    other.setScale(0.1, 0.1, 0.1);
+    other.setXYZ(-0.2, 0.2, 0);
+    t.equal(call(vm, 'sensing3d_touching', {TARGET: 'Other'}, box), true, 'on the triangle');
+    other.setXYZ(-0.8, 0.8, 0);
+    t.equal(call(vm, 'sensing3d_touching', {TARGET: 'Other'}, box), false, 'past its long edge');
+    t.end();
+});
+
+test('colliders can be shown, by the block to every camera and by the editor to its camera', async t => {
+    const {vm, physics, box, other} = await makeVM();
+    const scene3D = vm.runtime.scene3D;
+    const view = scene3D.colliderView;
+    // No renderer in tests: a scene to draw into
+    scene3D.scene = new THREE.Scene();
+    await vm.addSprite3D({name: 'Ring', models: [{name: 'ring', shape: 'torus'}]});
+    const ring = vm.runtime.targets.find(target => target.getName() === 'Ring');
+    ring.setXYZ(0, 5, 0);
+
+    view.update();
+    t.notOk(view._group, 'nothing until asked');
+
+    call(vm, 'physics3d_showcolliders', {SHOW: 'show'}, vm.runtime.getTargetForStage());
+    t.ok(view.shown, 'the stage can show them too');
+    await physics.load();
+    call(vm, 'physics3d_setbody', {BODY: 'static'}, other);
+    call(vm, 'physics3d_setshape', {SHAPE: 'mesh'}, ring);
+    call(vm, 'physics3d_setbody', {BODY: 'dynamic'}, ring);
+    view.update();
+    const objects = view._group.children;
+    t.equal(objects.length, 3, 'one per 3D sprite, not the camera');
+    const drawn = target => view._objects.get(target).object;
+    const colorOf = target => drawn(target).children[0].material.color.getHex();
+    t.equal(colorOf(box), 0x3ddc84, 'kinematic is green');
+    t.equal(colorOf(other), 0x4c97ff, 'static is blue');
+    t.ok(drawn(ring).children.length > 2, 'each convex piece of a dynamic mesh is drawn');
+    t.not(drawn(ring).children[0].material, drawn(ring).children[2].material, 'in different shades');
+    t.ok(drawn(box).children.every(child => child.layers.mask === 1), 'every camera sees it');
+
+    box.setXYZ(1, 2, 3);
+    view.update();
+    t.same(drawn(box).position.toArray(), [1, 2, 3], 'follows the sprite');
+    box.setVisible(false);
+    view.update();
+    t.notOk(view._objects.has(box), 'hidden sprites have no collider');
+
+    const raycaster = new THREE.Raycaster(new THREE.Vector3(0, 0, 10), new THREE.Vector3(0, 0, -1));
+    raycaster.layers.enableAll();
+    t.equal(raycaster.intersectObject(view._group, true).length, 0, 'can\'t be clicked');
+
+    call(vm, 'physics3d_showcolliders', {SHOW: 'hide'}, box);
+    view.update();
+    t.notOk(view._group.visible, 'hidden again');
+    // Like the GUI does, without the canvas that setEnabled needs
+    Object.assign(scene3D.editor, {enabled: true, collidersVisible: true});
+    view.update();
+    t.ok(view._group.visible, 'the editor\'s button');
+    t.ok(drawn(other).children.every(child => child.layers.mask === 1 << scene3D.constructor.EDITOR_LAYER),
+        'only for the editor camera');
+    t.equal(drawn(other).children[0].material.opacity, 0.2);
+    vm.setEditingTarget(other.id);
+    view.update();
+    t.ok(drawn(other).children[0].material.opacity > 0.2, 'the selected sprite is brighter');
     t.end();
 });
 

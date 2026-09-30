@@ -6,6 +6,7 @@ import PaintEditor from '../lib/tw-scratch-paint';
 import {inlineSvgFonts, sanitizeSvg} from '@turbowarp/scratch-svg-renderer';
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
 import {openFontsModal} from '../reducers/modals';
+import {readPath} from 'scratch-vm/src/engine/svg-bindings';
 
 import {connect} from 'react-redux';
 import {Theme} from '../lib/themes/index.js';
@@ -17,7 +18,8 @@ class PaintEditorWrapper extends React.Component {
             'handleUpdateImage',
             'handleUpdateName',
             'handleUpdateFonts',
-            'fontInlineFn'
+            'fontInlineFn',
+            'readBinding'
         ]);
         this.state = {
             fonts: this.props.vm.runtime.fontManager.getFonts()
@@ -61,6 +63,15 @@ class PaintEditorWrapper extends React.Component {
                 2 /* bitmapResolution */);
         }
     }
+    /**
+     * @param {object} node a path of a binding expression (`分數`, `self.hp`; a component's `文字` is one of its root)
+     * @returns {*} its value for the sprite being edited: the paint editor draws bound elements with it, like the
+     * stage does
+     */
+    readBinding (node) {
+        const target = this.props.vm.editingTarget;
+        return target ? readPath(target, node) : '';
+    }
     fontInlineFn (svgString) {
         return inlineSvgFonts(svgString, this.props.vm.renderer.customFonts);
     }
@@ -79,6 +90,7 @@ class PaintEditorWrapper extends React.Component {
                 onUpdateImage={this.handleUpdateImage}
                 onUpdateName={this.handleUpdateName}
                 fontInlineFn={this.fontInlineFn}
+                readBinding={this.readBinding}
                 theme={this.props.theme.isDark() ? 'dark' : 'light'}
                 customFonts={this.state.fonts}
                 width={this.props.customStageSize.width}

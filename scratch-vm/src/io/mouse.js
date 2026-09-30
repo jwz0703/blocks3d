@@ -2,6 +2,11 @@ const MathUtil = require('../util/math-util');
 
 const roundToThreeDecimals = number => Math.round(number * 1000) / 1000;
 
+// A press is a tap ("when this sprite is tapped") if it is let go this soon, having moved at most this far in
+// pixels of the page, so that dragging the view doesn't click what it started on
+const TAP_TIME = 600;
+const TAP_DISTANCE = 6;
+
 class Mouse {
     constructor (runtime) {
         this._clientX = 0;
@@ -11,6 +16,19 @@ class Mouse {
         this._buttons = new Set();
         this.usesRightClickDown = false;
         this._isDown = false;
+        /**
+         * The press that may become a tap: where and when it started, and what it pressed
+         * @type {?{x: number, y: number, time: number, target: Target}}
+         */
+        this._tap = null;
+        /**
+         * What the left button pressed, while it is down: the stage if it wasn't a sprite that takes the mouse.
+         * Orbiting cameras don't turn when dragging from buttons (see scene-3d-follow.js).
+         * @type {?Target}
+         */
+        this._pressTarget = null;
+        /** Counts presses of the left button, so that a new press can be told from the last one */
+        this._pressCount = 0;
         /**
          * Reference to the owning Runtime.
          * Can be used, for example, to activate hats.
@@ -37,6 +55,34 @@ class Mouse {
     }
 
     /**
+     * Activate the tap hats (twmouse): a short press that didn't drag.
+     * @param {Target} target that was pressed
+     * @private
+     */
+    _activateTapHats (target) {
+        this.runtime.startHats('twmouse_whentapped', null, target);
+        this.runtime.startHats('twmouse_whenstagetapped', null, target);
+    }
+
+    /**
+     * @param {number} x X position to be sent to the renderer.
+     * @param {number} y Y position to be sent to the renderer.
+     * @returns {number} the drawable at that location, leaving out the 2D sprites that can't be clicked
+     * @private
+     */
+    _pickDrawable (x, y) {
+        const renderer = this.runtime.renderer;
+        const skipped = new Set();
+        for (const target of this.runtime.targets) {
+            if (!target.isStage && !target.is3D && !target.blocksMouse()) skipped.add(target.drawableID);
+        }
+        if (skipped.size === 0) return renderer.pick(x, y);
+        // Given candidates, the renderer doesn't leave out the drawables that are never picked (like the pen layer)
+        const candidates = renderer._drawList.filter(id => !skipped.has(id) && renderer._allDrawables[id].interactive);
+        return renderer.pick(x, y, void 0, void 0, candidates);
+    }
+
+    /**
      * Find a target by XY location
      * @param  {number} x X position to be sent to the renderer.
      * @param  {number} y Y position to be sent to the renderer.
@@ -45,7 +91,7 @@ class Mouse {
      */
     _pickTarget (x, y) {
         if (this.runtime.renderer) {
-            const drawableID = this.runtime.renderer.pick(x, y);
+            const drawableID = this._pickDrawable(x, y);
             for (let i = 0; i < this.runtime.targets.length; i++) {
                 const target = this.runtime.targets[i];
                 if (Object.prototype.hasOwnProperty.call(target, 'drawableID') &&
@@ -67,6 +113,11 @@ class Mouse {
      * @param  {object} data Data from DOM event.
      */
     postData (data) {
+        // Moving too far makes the press a drag, not a tap
+        if (this._tap && typeof data.x === 'number' && typeof data.y === 'number' &&
+            Math.hypot(data.x - this._tap.x, data.y - this._tap.y) > TAP_DISTANCE) {
+            this._tap = null;
+        }
         if (typeof data.x === 'number') {
             this._clientX = data.x;
             this._scratchX = MathUtil.clamp(
@@ -98,6 +149,10 @@ class Mouse {
             // Do not trigger if down state has not changed
             if (previousDownState === this._isDown) return;
 
+            const tap = this._tap;
+            this._tap = null;
+            this._pressTarget = null;
+
             // Never trigger click hats at the end of a drag
             if (data.wasDragged) return;
 
@@ -105,11 +160,23 @@ class Mouse {
             if (!(data.x > 0 && data.x < data.canvasWidth &&
                 data.y > 0 && data.y < data.canvasHeight)) return;
 
+            const isNewMouseDown = !previousDownState && this._isDown;
+            const isNewMouseUp = previousDownState && !this._isDown;
+
+            // A tap is let go where it was pressed: it is on what it pressed
+            if (isNewMouseUp && tap && Date.now() - tap.time <= TAP_TIME &&
+                this.runtime.targets.includes(tap.target)) {
+                this._activateTapHats(tap.target);
+            }
+
             // target will not exist if project is still loading
             const target = this._pickTarget(data.x, data.y);
             if (target) {
-                const isNewMouseDown = !previousDownState && this._isDown;
-                const isNewMouseUp = previousDownState && !this._isDown;
+                if (isNewMouseDown && button === 0) {
+                    this._tap = {x: data.x, y: data.y, time: Date.now(), target};
+                    this._pressTarget = target;
+                    this._pressCount++;
+                }
 
                 // Draggable targets start click hats on mouse up.
                 // Non-draggable targets start click hats on mouse down.
@@ -158,6 +225,20 @@ class Mouse {
             return Math.round(this._scratchY);
         }
         return roundToThreeDecimals(this._scratchY);
+    }
+
+    /**
+     * @returns {?Target} what the left button pressed, while it is still down (the stage for nothing)
+     */
+    getPressTarget () {
+        return this._isDown ? this._pressTarget : null;
+    }
+
+    /**
+     * @returns {number} a number that changes with every press of the left button
+     */
+    getPressCount () {
+        return this._pressCount;
     }
 
     /**

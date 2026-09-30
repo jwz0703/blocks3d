@@ -2,9 +2,12 @@
 // camera, picking sprites (and the frustums of camera sprites) by clicking them, dragging them, a move / rotate /
 // scale gizmo, Blender-style G / R / S transforms with the keyboard, and a grid with axes. Like Blender, numpad 0
 // looks through the current camera and Ctrl + Alt + numpad 0 moves the current camera to the view. While the project
-// runs (green flag until stop) the stage shows the game camera instead.
+// runs (green flag until stop) the stage shows the game camera instead. What is changed here can be undone
+// (StageUndo).
 
 const ModalTransform = require('./scene-3d-modal-transform');
+const {RADIUS, VIEW_RADIUS, gizmoScale, styleGizmo, RotationSweep} = require('./scene-3d-rotate-sphere');
+const StageUndo = require('./stage-undo');
 
 const MODES = ['translate', 'rotate', 'scale'];
 // Key code: [gizmo mode, modal transform]
@@ -70,6 +73,8 @@ class Editor3D {
         /** False while the game runs, or while the user looks through the game camera. */
         this.useEditorCamera = true;
         this.helpersVisible = true;
+        /** Colliders seen by the editor camera (see ColliderView) */
+        this.collidersVisible = false;
         /** The performance panel on the stage (ROADMAP.md 7.4) */
         this.statsVisible = false;
         /** One of MODES */
@@ -79,6 +84,8 @@ class Editor3D {
         this.camera = null;
         this._orbitCenter = null;
         this._transform = null;
+        /** @type {?RotationSweep} the angle turned so far while dragging the rotate gizmo */
+        this._sweep = null;
         this._helpers = null;
         this._canvas = null;
         this._drag = null;
@@ -88,6 +95,9 @@ class Editor3D {
         this._lastPointer = null;
         this._hover = false;
         this._eatContextMenu = false;
+        /** Where the sprite was when the gizmo or a G / R / S transform started */
+        this._gizmoStart = null;
+        this._modalStart = null;
 
         this._onPointerDown = this._onPointerDown.bind(this);
         this._onPointerMove = this._onPointerMove.bind(this);
@@ -147,6 +157,7 @@ class Editor3D {
             available: this.enabled && !!this.camera,
             useEditorCamera: this.useEditorCamera,
             helpersVisible: this.helpersVisible,
+            collidersVisible: this.collidersVisible,
             statsVisible: this.statsVisible,
             mode: this.mode,
             modal: this._modal ? this._modal.describe() : null,
@@ -171,6 +182,7 @@ class Editor3D {
         enabled = !!enabled;
         if (this.enabled === enabled) return;
         this.enabled = enabled;
+        this.runtime.stageUndo.setEnabled(enabled);
         if (!enabled) this.cancelModal();
         if (enabled) this.setup();
         this._changed();
@@ -197,6 +209,11 @@ class Editor3D {
 
     setHelpersVisible (visible) {
         this.helpersVisible = !!visible;
+        this._changed();
+    }
+
+    setCollidersVisible (visible) {
+        this.collidersVisible = !!visible;
         this._changed();
     }
 
@@ -261,10 +278,27 @@ class Editor3D {
         const {TransformControls} = require('three/examples/jsm/controls/TransformControls.js');
         const transform = new TransformControls(this.camera, canvas);
         transform.setMode(this.mode);
-        transform.addEventListener('change', () => scene3D.markDirty());
+        styleGizmo(transform, THREE);
+        this._sweep = new RotationSweep(THREE);
+        this._sweep.group.traverse(object => object.layers.set(scene3D.constructor.EDITOR_LAYER));
+        scene3D.scene.add(this._sweep.group);
+        transform.addEventListener('change', () => {
+            this._updateSweep();
+            scene3D.markDirty();
+        });
         transform.addEventListener('objectChange', () => this._onObjectChange());
         transform.addEventListener('dragging-changed', event => {
-            if (!event.value) this.runtime.emitProjectChanged();
+            const object = transform.object;
+            const target = object && object.userData.twTarget;
+            if (event.value) {
+                this._gizmoStart = target ? {target, state: StageUndo.snapshot(target)} : null;
+                return;
+            }
+            this._sweep.hide();
+            const start = this._gizmoStart;
+            this._gizmoStart = null;
+            if (start && start.target === target) this.runtime.stageUndo.record(target, start.state);
+            this.runtime.emitProjectChanged();
         });
         this._transform = transform;
         // Only the editor camera sees the gizmo (attaching it to a sprite makes it visible again, even while the
@@ -276,6 +310,30 @@ class Editor3D {
 
         this.select(this.runtime.getEditingTarget());
         this._changed();
+    }
+
+    /**
+     * While the rotate gizmo is dragged around an axis or the view, show the angle turned so far.
+     */
+    _updateSweep () {
+        const transform = this._transform;
+        const axisName = transform.dragging && transform.mode === 'rotate' ? transform.axis : null;
+        if (!['X', 'Y', 'Z', 'E'].includes(axisName)) {
+            this._sweep.hide();
+            return;
+        }
+        const THREE = this.THREE;
+        let axis;
+        if (axisName === 'E') {
+            axis = transform.eye.clone();
+        } else {
+            axis = new THREE.Vector3();
+            axis[axisName.toLowerCase()] = 1;
+            if (transform.space === 'local') axis.applyQuaternion(transform.worldQuaternionStart);
+        }
+        const center = transform.worldPositionStart;
+        const radius = (axisName === 'E' ? VIEW_RADIUS : RADIUS) * gizmoScale(this.camera, center) * transform.size;
+        this._sweep.update(center, axis, transform.pointStart, transform.rotationAngle, radius);
     }
 
     /**
@@ -301,10 +359,17 @@ class Editor3D {
      */
     alignCameraToView () {
         if (!this.camera) return;
+        const cameraTarget = this.scene3D.getActiveCamera();
+        const before = cameraTarget ? StageUndo.snapshot(cameraTarget) : this.scene3D.getCameraState();
         const view = this.camera.clone();
         // The camera keeps its own field of view
         view.fov = this.scene3D.getCameraState().fov;
         this.scene3D.commitGameCamera(view);
+        if (cameraTarget) {
+            this.runtime.stageUndo.record(cameraTarget, before);
+        } else {
+            this.runtime.stageUndo.recordCamera(before, this.scene3D.getCameraState());
+        }
         this.runtime.emitProjectChanged();
         this.setUseEditorCamera(false);
     }
@@ -385,6 +450,7 @@ class Editor3D {
         const target = object && object.userData.twTarget;
         if (!this.active || !target || !this._lastPointer) return false;
         this._drag = null;
+        this._modalStart = StageUndo.snapshot(target);
         this._modal = new ModalTransform(this, type, target, this._lastPointer);
         this._modal.apply();
         this._changed();
@@ -393,6 +459,7 @@ class Editor3D {
 
     confirmModal () {
         if (!this._modal) return;
+        this.runtime.stageUndo.record(this._modal.target, this._modalStart);
         this._modal.dispose();
         this._modal = null;
         this._changed();
@@ -421,9 +488,11 @@ class Editor3D {
         const object = this._transform && this._transform.object;
         const target = object && object.userData.twTarget;
         if (!target) return;
+        const before = StageUndo.snapshot(target);
         if (type === 'grab') target.setXYZ(0, 0, 0);
         else if (type === 'rotate') target.setRotation(0, 0, 0);
         else target.setScale(1, 1, 1);
+        this.runtime.stageUndo.record(target, before);
         this.runtime.emitProjectChanged();
     }
 
@@ -525,7 +594,8 @@ class Editor3D {
                 startY: event.clientY,
                 started: false,
                 plane: new THREE.Plane().setFromNormalAndCoplanarPoint(normal, hit.point),
-                offset: new THREE.Vector3(target.x, target.y, target.z).sub(hit.point)
+                offset: new THREE.Vector3(target.x, target.y, target.z).sub(hit.point),
+                before: StageUndo.snapshot(target)
             };
             return;
         }
@@ -582,6 +652,7 @@ class Editor3D {
         const drag = this._drag;
         this._drag = null;
         if (drag && drag.type === 'move' && drag.started) {
+            this.runtime.stageUndo.record(drag.target, drag.before);
             this.runtime.emitProjectChanged();
         }
     }
@@ -723,7 +794,7 @@ class Editor3D {
         event.stopImmediatePropagation();
         const modal = this._modal;
         const code = event.code;
-        if (code === 'Escape') {
+        if (code === 'Escape' || (code === 'KeyZ' && (event.ctrlKey || event.metaKey))) {
             this.cancelModal();
         } else if (code === 'Enter' || code === 'NumpadEnter' || code === 'Space') {
             this.confirmModal();

@@ -59,7 +59,8 @@ class CrossCall {
         } else if (spriteName === MYSELF) {
             original = caller && caller.sprite ? caller.sprite.clones[0] : null;
         } else {
-            original = this.runtime.getSpriteTargetByName(spriteName) ||
+            // Members of a component find the other members of it first
+            original = this.runtime.components.resolveName(caller, spriteName) ||
                 (this.runtime.getTargetForStage() && this.runtime.getTargetForStage().getName() === spriteName ?
                     this.runtime.getTargetForStage() :
                     null);
@@ -67,7 +68,10 @@ class CrossCall {
         if (!original) return [];
         if (mode === MODE_SPRITE) return [original];
         // sprite.clones has the sprite first, then its clones in the order they were made
-        const everyone = original.sprite ? original.sprite.clones.slice() : [original];
+        // Instances of a component share their sprite: only the clones of this one
+        const everyone = original.sprite ? original.sprite.clones.filter(target => target === original ||
+            (!target.isOriginal && target.instanceName === original.instanceName &&
+                target.componentOwner === original.componentOwner)) : [original];
         if (mode === MODE_EACH) return everyone;
         if (mode === MODE_ID) {
             const wanted = Cast.toString(id);
@@ -190,11 +194,24 @@ class CrossCall {
         const values = procedure.paramIds.map((id, index) => (
             args && Object.prototype.hasOwnProperty.call(args, id) ? args[id] : procedure.paramDefaults[index]
         ));
-        return {
-            fn: binding.procedures[procedure.variant],
-            yields: !!compiled.yields[procedure.variant],
-            args: values
-        };
+        const raw = binding.procedures[procedure.variant];
+        const yields = !!compiled.yields[procedure.variant];
+        // Blocks that the compiler leaves to their functions (extensions) find their target in the thread that
+        // runs, so the custom block runs as the thread of the callee, whenever it runs a piece
+        const jsexecute = require('../compiler/jsexecute');
+        const as = binding.thread;
+        const fn = yields ?
+            function* (...callArgs) {
+                const generator = raw(...callArgs);
+                let step = jsexecute.runInThread(as, () => generator.next());
+                while (!step.done) {
+                    const sent = yield step.value;
+                    step = jsexecute.runInThread(as, () => generator.next(sent));
+                }
+                return step.value;
+            } :
+            (...callArgs) => jsexecute.runInThread(as, () => raw(...callArgs));
+        return {fn, yields, args: values};
     }
 
     /**

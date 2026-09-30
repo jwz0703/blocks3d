@@ -49,6 +49,7 @@ class SpriteInfo extends React.Component {
             this.props.name !== nextProps.name ||
             this.props.stageSize !== nextProps.stageSize ||
             this.props.visible !== nextProps.visible ||
+            this.props.extraRowKey !== nextProps.extraRowKey ||
             // Only update these if rounded value has changed
             Math.round(this.props.direction) !== Math.round(nextProps.direction) ||
             Math.round(this.props.size) !== Math.round(nextProps.size) ||
@@ -170,6 +171,7 @@ class SpriteInfo extends React.Component {
                         {xPosition}
                         {yPosition}
                     </div>
+                    {this.props.extraRow}
                 </Box>
             );
         }
@@ -244,6 +246,7 @@ class SpriteInfo extends React.Component {
                         />
                     </div>
                 </div>
+                {this.props.extraRow}
             </Box>
         );
     }
@@ -255,6 +258,10 @@ SpriteInfo.propTypes = {
         PropTypes.number
     ]),
     disabled: PropTypes.bool,
+    // More fields, e.g. the properties of an instance of a component
+    extraRow: PropTypes.node,
+    // Changes when what extraRow shows changes
+    extraRowKey: PropTypes.string,
     intl: intlShape,
     name: PropTypes.string,
     onChangeDirection: PropTypes.func,

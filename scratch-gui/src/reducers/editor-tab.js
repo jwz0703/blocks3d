@@ -6,6 +6,8 @@ const COSTUMES_TAB_INDEX = 1;
 // The Sounds tab was merged into the Files tab, so anything that opens "sounds" lands there
 const FILES_TAB_INDEX = 2;
 const SOUNDS_TAB_INDEX = FILES_TAB_INDEX;
+// For an instance of a component or a sprite in one: the values of its properties; on the page of a component: its test
+const COMPONENT_TAB_INDEX = 3;
 
 const initialState = {
     activeTabIndex: BLOCKS_TAB_INDEX
@@ -37,5 +39,6 @@ export {
     BLOCKS_TAB_INDEX,
     COSTUMES_TAB_INDEX,
     SOUNDS_TAB_INDEX,
-    FILES_TAB_INDEX
+    FILES_TAB_INDEX,
+    COMPONENT_TAB_INDEX
 };

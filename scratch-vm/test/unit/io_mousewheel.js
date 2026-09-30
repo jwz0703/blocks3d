@@ -15,7 +15,8 @@ test('blocks activated by scrolling', t => {
     let _startHatsArgs;
     const rt = {
         startHats: (...args) => {
-            _startHatsArgs = args;
+            // The first hats started are the arrow keys; the wheel blocks come after
+            if (!_startHatsArgs) _startHatsArgs = args;
         }
     };
     const mw = new MouseWheel(rt);

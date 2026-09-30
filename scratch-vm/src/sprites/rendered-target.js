@@ -96,6 +96,17 @@ class RenderedTarget extends Target {
         this.draggable = false;
 
         /**
+         * What the mouse does at the target (the twmouse "mouse ... this sprite" block):
+         * - 'block': stops there. The target can be clicked, and hides what is behind it from clicks and the mouse.
+         * - 'pass': goes through to what is behind it, e.g. leaves in front of a sprite that can be clicked. The
+         *   target's own click and mouse hats never start.
+         * - 'auto': 'block' for 2D sprites; for 3D sprites, see Target3D.blocksMouse.
+         * The stage always stops the mouse.
+         * @type {string}
+         */
+        this.mouseMode = 'auto';
+
+        /**
          * Whether the rendered target is currently visible.
          * @type {boolean}
          */
@@ -186,6 +197,20 @@ class RenderedTarget extends Target {
         }
     }
 
+    /**
+     * @returns {?object} the properties of an instance of a component that aren't the default (they are variables of
+     * its root, see engine/components.js)
+     */
+    get componentProps () {
+        if (!this.sprite || !this.sprite.component) return this._componentProps;
+        return this.runtime.components.overridesOf(this);
+    }
+
+    set componentProps (values) {
+        if (!this.sprite || !this.sprite.component) this._componentProps = values;
+        else this.runtime.components.applyOverrides(this, values);
+    }
+
     get audioPlayer () {
         /* eslint-disable no-console */
         console.warn('get audioPlayer deprecated, please update to use .sprite.soundBank methods');
@@ -266,13 +291,14 @@ class RenderedTarget extends Target {
         const oldX = this.x;
         const oldY = this.y;
         if (this.renderer) {
-            const position = this.runtime.runtimeOptions.fencing ?
+            // Members of a component are placed in the component (no fence: the edge of the stage isn't theirs)
+            const position = this.runtime.runtimeOptions.fencing && !this.componentOwner ?
                 this.renderer.getFencedPositionOfDrawable(this.drawableID, [x, y]) :
                 [x, y];
             this.x = position[0];
             this.y = position[1];
 
-            this.renderer.updateDrawablePosition(this.drawableID, position);
+            this.renderer.updateDrawablePosition(this.drawableID, this._renderedPosition());
             if (this.visible) {
                 this.emitVisualChange();
                 this.runtime.requestRedraw();
@@ -284,7 +310,101 @@ class RenderedTarget extends Target {
         if (this.onTargetMoved) {
             this.onTargetMoved(this, oldX, oldY, force);
         }
+        // Components (engine/components.js): members are placed from their instance; changing a member while editing
+        // the component changes the component
+        if (this.componentMembers) this.runtime.components.reposeMembers(this);
+        if (this.componentOwner) this.runtime.components.memberChanged(this);
         this.runtime.requestTargetsUpdate(this);
+    }
+
+    /**
+     * A component is a coordinate system with its root as the origin: the x, y, direction and size of a member are
+     * relative to the instance it is in (which can itself be in another). The root's own are where the whole component
+     * is on its level.
+     * @returns {{x: number, y: number, angle: number, k: number}} where this target is on the stage: its position, how
+     * far it is turned from direction 90 and its size as a factor
+     */
+    _worldFrame () {
+        const own = {x: this.x, y: this.y, angle: this.direction - 90, k: this.size / 100};
+        const owner = this.componentOwner;
+        if (!owner || owner === this) return own;
+        const outer = owner._worldFrame();
+        const radians = outer.angle * Math.PI / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const x = own.x * outer.k;
+        const y = own.y * outer.k;
+        return {
+            x: outer.x + (x * cos) + (y * sin),
+            y: outer.y - (x * sin) + (y * cos),
+            angle: outer.angle + own.angle,
+            k: outer.k * own.k
+        };
+    }
+
+    /**
+     * @returns {Array<number>} where the drawable is on the stage
+     */
+    _renderedPosition () {
+        if (!this.componentOwner) return [this.x, this.y];
+        const frame = this._worldFrame();
+        return [frame.x, frame.y];
+    }
+
+    /**
+     * @param {number} x on the stage
+     * @param {number} y on the stage
+     * @returns {Array<number>} the same place in the coordinates this target has: the ones of the component it is in
+     */
+    stageToLocal (x, y) {
+        return this.componentOwner ? this.stageToComponent(x, y) : [x, y];
+    }
+
+    /**
+     * @param {number} x on the stage
+     * @param {number} y
+     * @returns {Array<number>} the same place in the component this target is part of, root or member (the root of the
+     * component is the origin, and it turns and scales the component), or on the stage if it isn't in one. The mouse
+     * in the scripts of a component is where it is in the component.
+     */
+    stageToComponent (x, y) {
+        const owner = this.componentOwner || (this.sprite && this.sprite.component ? this : null);
+        if (!owner) return [x, y];
+        const frame = owner._worldFrame();
+        const radians = frame.angle * Math.PI / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const dx = x - frame.x;
+        const dy = y - frame.y;
+        return [((dx * cos) - (dy * sin)) / frame.k, ((dx * sin) + (dy * cos)) / frame.k];
+    }
+
+    /**
+     * @param {number} x in the coordinates of this target
+     * @param {number} y
+     * @returns {Array<number>} the same place on the stage
+     */
+    localToStage (x, y) {
+        const owner = this.componentOwner;
+        if (!owner) return [x, y];
+        const frame = owner._worldFrame();
+        const radians = frame.angle * Math.PI / 180;
+        const cos = Math.cos(radians);
+        const sin = Math.sin(radians);
+        const dx = x * frame.k;
+        const dy = y * frame.k;
+        return [frame.x + (dx * cos) + (dy * sin), frame.y - (dx * sin) + (dy * cos)];
+    }
+
+    /**
+     * @returns {boolean} true if it is shown: itself, and the component it is in
+     */
+    _effectiveVisible () {
+        for (let target = this; target; target = target.componentOwner) {
+            if (!target.visible) return false;
+            if (target.componentOwner === target) break;
+        }
+        return true;
     }
 
     /**
@@ -293,16 +413,24 @@ class RenderedTarget extends Target {
      */
     _getRenderedDirectionAndScale () {
         // Default: no changes to `this.direction` or `this.scale`.
-        let finalDirection = this.direction;
-        let finalScale = [this.size, this.size];
+        let direction = this.direction;
+        let size = this.size;
+        if (this.componentOwner) {
+            // Turned and scaled with the component it is in
+            const frame = this._worldFrame();
+            direction = MathUtil.wrapClamp(frame.angle + 90, -179, 180);
+            size = frame.k * 100;
+        }
+        let finalDirection = direction;
+        let finalScale = [size, size];
         if (this.rotationStyle === RenderedTarget.ROTATION_STYLE_NONE) {
             // Force rendered direction to be 90.
             finalDirection = 90;
         } else if (this.rotationStyle === RenderedTarget.ROTATION_STYLE_LEFT_RIGHT) {
             // Force rendered direction to be 90, and flip drawable if needed.
             finalDirection = 90;
-            const scaleFlip = (this.direction < 0) ? -1 : 1;
-            finalScale = [scaleFlip * this.size, this.size];
+            const scaleFlip = (direction < 0) ? -1 : 1;
+            finalScale = [scaleFlip * size, size];
         }
         return {direction: finalDirection, scale: finalScale};
     }
@@ -323,6 +451,7 @@ class RenderedTarget extends Target {
         if (this.renderer) {
             const {direction: renderedDirection, scale} = this._getRenderedDirectionAndScale();
             this.renderer.updateDrawableDirectionScale(this.drawableID, renderedDirection, scale);
+            if (this.componentMembers) this.runtime.components.reposeMembers(this);
             if (this.visible) {
                 this.emitVisualChange();
                 this.runtime.requestRedraw();
@@ -342,6 +471,36 @@ class RenderedTarget extends Target {
     }
 
     /**
+     * @param {string} mode 'auto', 'pass' or 'block', see mouseMode
+     */
+    setMouseMode (mode) {
+        if (this.isStage || !RenderedTarget.MOUSE_MODES.includes(mode)) return;
+        this.mouseMode = mode;
+        this.runtime.requestTargetsUpdate(this);
+    }
+
+    /**
+     * @param {!boolean} clickable the old "set can be clicked" block: true stops the mouse, false lets it through
+     */
+    setClickable (clickable) {
+        this.setMouseMode(clickable ? 'block' : 'pass');
+    }
+
+    /**
+     * @returns {boolean} true if the mouse stops at this target: clicks find it and not what is behind it
+     */
+    blocksMouse () {
+        return this.mouseMode !== 'pass';
+    }
+
+    /**
+     * @returns {string[]} what mouseMode can be
+     */
+    static get MOUSE_MODES () {
+        return ['auto', 'pass', 'block'];
+    }
+
+    /**
      * Set visibility; i.e., whether it's shown or hidden.
      * @param {!boolean} visible True if should be shown.
      */
@@ -351,7 +510,9 @@ class RenderedTarget extends Target {
         }
         this.visible = !!visible;
         if (this.renderer) {
-            this.renderer.updateDrawableVisible(this.drawableID, this.visible);
+            this.renderer.updateDrawableVisible(this.drawableID, this._effectiveVisible());
+            // Hiding the root of a component hides all of it
+            if (this.componentMembers) this.runtime.components.reposeMembers(this);
             if (this.visible) {
                 this.emitVisualChange();
                 this.runtime.requestRedraw();
@@ -383,6 +544,7 @@ class RenderedTarget extends Target {
             this.size = MathUtil.clamp(size / 100, minScale, maxScale) * 100;
             const {direction, scale} = this._getRenderedDirectionAndScale();
             this.renderer.updateDrawableDirectionScale(this.drawableID, direction, scale);
+            if (this.componentMembers) this.runtime.components.reposeMembers(this);
             if (this.visible) {
                 this.emitVisualChange();
                 this.runtime.requestRedraw();
@@ -590,6 +752,7 @@ class RenderedTarget extends Target {
         if (this.renderer) {
             const {direction, scale} = this._getRenderedDirectionAndScale();
             this.renderer.updateDrawableDirectionScale(this.drawableID, direction, scale);
+            if (this.componentMembers) this.runtime.components.reposeMembers(this);
             if (this.visible) {
                 this.emitVisualChange();
                 this.runtime.requestRedraw();
@@ -685,9 +848,10 @@ class RenderedTarget extends Target {
     updateAllDrawableProperties () {
         if (this.renderer) {
             const {direction, scale} = this._getRenderedDirectionAndScale();
-            this.renderer.updateDrawablePosition(this.drawableID, [this.x, this.y]);
+            this.renderer.updateDrawablePosition(this.drawableID, this._renderedPosition());
             this.renderer.updateDrawableDirectionScale(this.drawableID, direction, scale);
-            this.renderer.updateDrawableVisible(this.drawableID, this.visible);
+            this.renderer.updateDrawableVisible(this.drawableID, this._effectiveVisible());
+            if (this.componentMembers) this.runtime.components.reposeMembers(this);
 
             const costume = this.getCostumes()[this.currentCostume];
             this.renderer.updateDrawableSkinId(this.drawableID, costume.skinId);
@@ -711,7 +875,8 @@ class RenderedTarget extends Target {
      * @returns {string} Human-readable name.
      */
     getName () {
-        return this.sprite.name;
+        // Instances of components have names of their own (engine/components.js)
+        return this.instanceName || this.sprite.name;
     }
 
     /**
@@ -743,7 +908,8 @@ class RenderedTarget extends Target {
      * drawn, so that 2D blocks such as "go to" and "distance to" follow them.
      */
     getStagePosition () {
-        return {x: this.x, y: this.y};
+        const [x, y] = this._renderedPosition();
+        return {x, y};
     }
 
     /**
@@ -999,12 +1165,20 @@ class RenderedTarget extends Target {
         newClone.y = this.y;
         newClone.direction = this.direction;
         newClone.draggable = this.draggable;
+        newClone.mouseMode = this.mouseMode;
         newClone.visible = this.visible;
         newClone.size = this.size;
         newClone.currentCostume = this.currentCostume;
         newClone.rotationStyle = this.rotationStyle;
         newClone.effects = Clone.simple(this.effects);
         newClone.variables = this.duplicateVariables();
+        // A clone of an instance of a component is that instance, with the same property values
+        if (this.instanceName) newClone.instanceName = this.instanceName;
+        if (this.componentOwner) {
+            newClone.componentOwner = this.componentOwner;
+            newClone.memberKey = this.memberKey;
+        }
+        if (this.componentProps) newClone.componentProps = Object.assign({}, this.componentProps);
         newClone._edgeActivatedHatValues = Clone.simple(this._edgeActivatedHatValues);
         newClone.initDrawable(StageLayering.SPRITE_LAYER);
         newClone.updateAllDrawableProperties();
@@ -1024,6 +1198,7 @@ class RenderedTarget extends Target {
             newTarget.y = (Math.random() - 0.5) * 300 / 2;
             newTarget.direction = this.direction;
             newTarget.draggable = this.draggable;
+            newTarget.mouseMode = this.mouseMode;
             newTarget.visible = this.visible;
             newTarget.size = this.size;
             newTarget.currentCostume = this.currentCostume;
@@ -1060,13 +1235,20 @@ class RenderedTarget extends Target {
         const isXChanged = Object.prototype.hasOwnProperty.call(data, 'x');
         const isYChanged = Object.prototype.hasOwnProperty.call(data, 'y');
         if (isXChanged || isYChanged) {
-            this.setXY(isXChanged ? data.x : this.x, isYChanged ? data.y : this.y, force);
+            let x = isXChanged ? data.x : this.x;
+            let y = isYChanged ? data.y : this.y;
+            // Dragging on the stage gives places on the stage; the fields of the sprite info are in the component
+            if (force && this.componentOwner) [x, y] = this.stageToLocal(x, y);
+            this.setXY(x, y, force);
         }
         if (Object.prototype.hasOwnProperty.call(data, 'direction')) {
             this.setDirection(data.direction);
         }
         if (Object.prototype.hasOwnProperty.call(data, 'draggable')) {
             this.setDraggable(data.draggable);
+        }
+        if (Object.prototype.hasOwnProperty.call(data, 'mouseMode')) {
+            this.setMouseMode(data.mouseMode);
         }
         if (Object.prototype.hasOwnProperty.call(data, 'rotationStyle')) {
             this.setRotationStyle(data.rotationStyle);
@@ -1109,6 +1291,7 @@ class RenderedTarget extends Target {
             size: this.size,
             direction: this.direction,
             draggable: this.draggable,
+            mouseMode: this.mouseMode,
             currentCostume: this.currentCostume,
             costume: costumes[this.currentCostume],
             costumeCount: costumes.length,
@@ -1123,7 +1306,17 @@ class RenderedTarget extends Target {
             tempo: this.tempo,
             volume: this.volume,
             videoTransparency: this.videoTransparency,
-            videoState: this.videoState
+            videoState: this.videoState,
+            // Instances of components (engine/components.js)
+            componentId: this.sprite.component ? this.sprite.component.id : null,
+            componentName: this.sprite.component ? this.sprite.name : null,
+            componentProps: this.sprite.component ? this.sprite.component.props : null,
+            componentValues: this.sprite.component ? this.runtime.components.propsOf(this) : null,
+            componentOverrides: this.sprite.component ? Object.keys(this.componentProps || {}) : null,
+            // A member of an instance of a component: the id of the instance
+            componentOwnerId: this.componentOwner ? this.componentOwner.id : null,
+            // The instance on the page of a component (not part of the project)
+            componentPreview: !!this.isPreview
 
         };
     }

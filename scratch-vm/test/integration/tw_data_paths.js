@@ -461,9 +461,12 @@ for (const compiled of MODES) {
         // when I start as a clone (id): add id to global.ids; set self.hp to 100
         addScript(sprite, [
             data('addItem', {PATH: 'ids', ITEM: {opcode: 'control_start_as_clone_id', shadow: true}}),
-            cloneVar('setVariable', {NAME: 'hp', VALUE: '100'})
+            cloneVar('setVariable', {NAME: 'hp', VALUE: '100'}),
+            cloneVar('setVariable', {NAME: 'isClone', VALUE: {opcode: 'twclonevars_isClone'}})
         ], {opcode: 'control_start_as_clone', inputs: {ID: {opcode: 'control_start_as_clone_id', shadow: true}}});
         run(vm, 3);
+        const isClone = vm.runtime.getOpcodeFunction('twclonevars_isClone');
+        t.equal(isClone({}, {target: sprite}), false, 'the sprite itself is not a clone');
         t.same(variableValue(stage, 'ids'), [1, 2, 'boss', 'boss', 7], 'ids, numbered when empty');
         const byId = id => sprite.sprite.clones.filter(c => !c.isOriginal && c.cloneId === id);
         t.equal(byId('boss').length, 2, 'ids can repeat');
@@ -490,6 +493,7 @@ for (const compiled of MODES) {
         t.equal(byId(1).length, 1, 'other clones stay');
         t.equal(DataPath.get(sprite, null, 'self.id'), 0, 'originals have id 0');
         t.equal(DataPath.get(byId(2)[0], null, 'self.id'), 2);
+        t.equal(DataPath.get(byId(2)[0], null, 'self.isClone'), true, 'clones know they are clones');
 
         // Numbers start again when the clones are gone
         vm.stopAll();

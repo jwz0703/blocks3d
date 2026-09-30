@@ -14,13 +14,16 @@ class CustomProcedures extends React.Component {
             'handleAddBoolean',
             'handleAddTextNumber',
             'handleToggleWarp',
+            'handlePurposeChange',
             'handleCancel',
             'handleOk',
             'setBlocks'
         ]);
         this.state = {
             rtlOffset: 0,
-            warp: false
+            warp: false,
+            // What the block is for in a component (see containers/blocks.jsx): not the same as the block itself
+            purpose: props.purpose || ''
         };
     }
     componentWillUnmount () {
@@ -115,7 +118,10 @@ class CustomProcedures extends React.Component {
     }
     handleOk () {
         const newMutation = this.mutationRoot ? this.mutationRoot.mutationToDom(true) : null;
-        this.props.onRequestClose(newMutation);
+        this.props.onRequestClose(newMutation, this.state.purpose);
+    }
+    handlePurposeChange (e) {
+        this.setState({purpose: e.target.value});
     }
     handleAddLabel () {
         if (this.mutationRoot) {
@@ -149,7 +155,12 @@ class CustomProcedures extends React.Component {
                 onAddTextNumber={this.handleAddTextNumber}
                 onCancel={this.handleCancel}
                 onOk={this.handleOk}
+                onPurposeChange={this.handlePurposeChange}
                 onToggleWarp={this.handleToggleWarp}
+                hideWarp={this.props.hideWarp}
+                purpose={this.state.purpose}
+                purposes={this.props.purposes}
+                title={this.props.title}
             />
         );
     }
@@ -159,6 +170,10 @@ CustomProcedures.propTypes = {
     isRtl: PropTypes.bool,
     mutator: PropTypes.instanceOf(Element),
     onRequestClose: PropTypes.func.isRequired,
+    hideWarp: PropTypes.bool,
+    purpose: PropTypes.string,
+    purposes: PropTypes.arrayOf(PropTypes.object),
+    title: PropTypes.string,
     options: PropTypes.shape({
         media: PropTypes.string,
         zoom: PropTypes.shape({

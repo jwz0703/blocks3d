@@ -294,9 +294,9 @@ class JSGenerator {
         case InputOpcode.SENSING_MOUSE_DOWN:
             return 'runtime.ioDevices.mouse.getIsDown()';
         case InputOpcode.SENSING_MOUSE_X:
-            return 'runtime.ioDevices.mouse.getScratchX()';
+            return 'localMouse(target, 0)';
         case InputOpcode.SENSING_MOUSE_Y:
-            return 'runtime.ioDevices.mouse.getScratchY()';
+            return 'localMouse(target, 1)';
 
         case InputOpcode.OP_ABS:
             return `Math.abs(${this.descendInput(node.value)})`;

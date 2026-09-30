@@ -5,6 +5,7 @@ const SkyRenderer = require('./scene-3d-sky');
 const CameraFollow = require('./scene-3d-follow');
 const Physics3D = require('./scene-3d-physics');
 const Instancing = require('./scene-3d-instancing');
+const ColliderView = require('./scene-3d-collider-view');
 const {setAudioParam} = require('./spatial-audio-effect');
 
 // three.js is only loaded once something 3D is on the stage. The exported player only includes it for projects
@@ -28,6 +29,51 @@ const SHAPE_SIZES = {
 };
 
 const MODEL_EXTENSION = /\.(glb|gltf)$/i;
+
+/**
+ * @param {string} key
+ * @param {Array<{geometry: THREE.BufferGeometry, matrix: THREE.Matrix4}>} meshes
+ * @returns {?{key: string, vertices: Float32Array, indices: Uint32Array}} the triangles of every mesh in one list,
+ * with vertices at the same place (split for normals or UVs) merged; null if there are no triangles
+ */
+const mergeTriangles = (key, meshes) => {
+    const vertices = [];
+    const indices = [];
+    const seen = new Map();
+    const point = new THREE.Vector3();
+    const round = n => Math.round(n * 1e5) / 1e5;
+    for (const {geometry, matrix} of meshes) {
+        const position = geometry.attributes.position;
+        const index = geometry.index;
+        const count = index ? index.count : position.count;
+        const start = Math.max(0, geometry.drawRange.start);
+        const end = Math.min(count, start + geometry.drawRange.count);
+        const mapped = new Map();
+        const vertexOf = i => {
+            let result = mapped.get(i);
+            if (result !== void 0) return result;
+            point.fromBufferAttribute(position, i).applyMatrix4(matrix);
+            const pointKey = `${round(point.x)},${round(point.y)},${round(point.z)}`;
+            result = seen.get(pointKey);
+            if (result === void 0) {
+                result = vertices.length / 3;
+                vertices.push(point.x, point.y, point.z);
+                seen.set(pointKey, result);
+            }
+            mapped.set(i, result);
+            return result;
+        };
+        for (let i = start; i + 2 < end; i += 3) {
+            const a = vertexOf(index ? index.getX(i) : i);
+            const b = vertexOf(index ? index.getX(i + 1) : i + 1);
+            const c = vertexOf(index ? index.getX(i + 2) : i + 2);
+            // Triangles without area confuse Rapier
+            if (a !== b && b !== c && a !== c) indices.push(a, b, c);
+        }
+    }
+    if (indices.length === 0) return null;
+    return {key, vertices: new Float32Array(vertices), indices: new Uint32Array(indices)};
+};
 
 // Keep the camera from flipping over when looking straight up or down
 const MAX_PITCH = (Math.PI / 2) - 0.001;
@@ -154,6 +200,8 @@ class Scene3D {
         this._mixers = new WeakMap();
         /** @type {Map<string, THREE.BufferGeometry>} one geometry per basic shape, shared by every copy */
         this._geometries = new Map();
+        /** @type {Map<string, ?object>} triangles of each model, for colliders (see getModelGeometry) */
+        this._modelGeometries = new Map();
         /** @type {Map<string, {material: THREE.Material, users: number}>} shared materials of basic shapes */
         this._materials = new Map();
         /** @type {Map<string, THREE.Texture>} textures by file md5 */
@@ -185,10 +233,18 @@ class Scene3D {
         this.editor = new Editor3D(this);
         /** Cameras that follow 3D sprites */
         this.follow = new CameraFollow(this);
+        /**
+         * Camera shake ("相機震動"): {strength, duration, time}, or null. It moves where the game camera is drawn
+         * (and where clicks are picked from) by `_shakeOffset`, not the camera itself.
+         */
+        this._shake = null;
+        this._shakeOffset = null;
         /** Collision and physics */
         this.physics = new Physics3D(this);
         /** Clones and copies of the same model are drawn together */
         this.instancing = new Instancing(this);
+        /** Colliders drawn on the stage, to see what collision uses */
+        this.colliderView = new ColliderView(this);
 
         /** Frames per second of the runtime and what the last render drew, for the performance panel */
         this._frameTimes = [];
@@ -199,6 +255,7 @@ class Scene3D {
             this._countFrame();
             this._updateAnimations(runtime.frameDelta);
             this.follow.tick();
+            this._updateShake(runtime.frameDelta);
             this._updateBubbles();
             this._updateAudio();
             this._render();
@@ -213,6 +270,7 @@ class Scene3D {
         runtime.on('PROJECT_STOP_ALL', () => {
             this.setPointerLock(false);
             this.follow.reset();
+            this.stopShake();
             // Animations stop where they are
             for (const target of this.targets) {
                 if (target.animation) target.animation.playing = false;
@@ -457,6 +515,7 @@ class Scene3D {
         const info = this.three.info;
         info.autoReset = false;
         info.reset();
+        this.colliderView.update();
         this.instancing.begin(camera);
         try {
             this.three.render(this.scene, camera);
@@ -563,7 +622,9 @@ class Scene3D {
     reset () {
         this.setPointerLock(false);
         this.follow.reset();
+        this.stopShake();
         this.physics.reset();
+        this.colliderView.reset();
         this.instancing.reset();
         this.clearObjects();
         for (const promise of this._modelCache.values()) {
@@ -571,6 +632,7 @@ class Scene3D {
         }
         this._modelCache.clear();
         this._loadedModels.clear();
+        this._modelGeometries.clear();
         for (const texture of this._textures.values()) texture.dispose();
         this._textures.clear();
         for (const texture of this._canvasTextures.values()) texture.dispose();
@@ -1137,6 +1199,52 @@ class Scene3D {
     }
 
     /**
+     * Shake the game camera: it moves around randomly (it doesn't turn), less and less until the time is up. A
+     * weaker shake doesn't replace a stronger one that is still going.
+     * @param {number} strength how far it moves at first, in world units
+     * @param {number} seconds how long it lasts
+     */
+    shakeCamera (strength, seconds) {
+        strength = Math.max(0, Number(strength) || 0);
+        seconds = Math.max(0, Number(seconds) || 0);
+        if (strength === 0 || seconds === 0) return;
+        if (this._shake && this._shakeStrength() > strength) return;
+        this._shake = {strength, duration: seconds, time: 0};
+    }
+
+    stopShake () {
+        if (!this._shake && !this._shakeOffset) return;
+        this._shake = null;
+        this._shakeOffset = null;
+        this.markDirty();
+    }
+
+    // How strong the shake is now: it fades out
+    _shakeStrength () {
+        const shake = this._shake;
+        if (!shake) return 0;
+        const left = Math.max(0, 1 - (shake.time / shake.duration));
+        return shake.strength * left * left;
+    }
+
+    /**
+     * Move the shake on, once a frame.
+     * @param {number} delta seconds since the last frame
+     */
+    _updateShake (delta) {
+        if (!this._shake || this.runtime.paused) return;
+        this._shake.time += Math.max(0, Number(delta) || 0);
+        if (this._shake.time >= this._shake.duration) {
+            this.stopShake();
+            return;
+        }
+        const strength = this._shakeStrength();
+        const random = () => ((Math.random() * 2) - 1) * strength;
+        this._shakeOffset = {x: random(), y: random(), z: random()};
+        this.markDirty();
+    }
+
+    /**
      * @param {THREE.PerspectiveCamera} camera
      * @returns {THREE.PerspectiveCamera} the same camera, placed like the game camera
      */
@@ -1144,6 +1252,11 @@ class Scene3D {
         const state = this.getCameraState();
         const degToRad = THREE.MathUtils.degToRad;
         camera.position.set(state.x, state.y, state.z);
+        if (this._shakeOffset) {
+            camera.position.x += this._shakeOffset.x;
+            camera.position.y += this._shakeOffset.y;
+            camera.position.z += this._shakeOffset.z;
+        }
         camera.rotation.set(degToRad(state.pitch), degToRad(state.yaw), degToRad(state.roll));
         const aspect = this.runtime.stageWidth / this.runtime.stageHeight;
         if (camera.fov !== state.fov || (!this.three && camera.aspect !== aspect)) {
@@ -1173,10 +1286,12 @@ class Scene3D {
         const radToDeg = THREE.MathUtils.radToDeg;
         const round = n => Math.round(n * 1e6) / 1e6;
         const rotation = new THREE.Euler().setFromQuaternion(camera.quaternion, 'YXZ');
+        // The shake isn't where the camera is
+        const shake = this._shakeOffset || {x: 0, y: 0, z: 0};
         this.setCameraState({
-            x: round(camera.position.x),
-            y: round(camera.position.y),
-            z: round(camera.position.z),
+            x: round(camera.position.x - shake.x),
+            y: round(camera.position.y - shake.y),
+            z: round(camera.position.z - shake.z),
             pitch: round(radToDeg(rotation.x)),
             yaw: round(radToDeg(rotation.y)),
             roll: round(radToDeg(rotation.z)),
@@ -1216,7 +1331,8 @@ class Scene3D {
 
     _onLockMouseDown () {
         const canvas = this._lockCanvas;
-        if (!this._lockEnabled || document.pointerLockElement === canvas) return;
+        // Clicking the stage while paused must not take the mouse away again
+        if (!this._lockEnabled || this.runtime.paused || document.pointerLockElement === canvas) return;
         const result = canvas.requestPointerLock();
         // Newer browsers return a promise that rejects e.g. right after pressing Esc
         if (result && typeof result.catch === 'function') result.catch(() => {});
@@ -1237,7 +1353,7 @@ class Scene3D {
     _onLookTouch (e) {
         if (e.pointerType !== 'touch') return;
         if (e.type === 'pointerdown') {
-            if (this._lockEnabled && !this._lookTouch) {
+            if (this._lockEnabled && !this.runtime.paused && !this._lookTouch) {
                 this._lookTouch = {id: e.pointerId, x: e.clientX, y: e.clientY};
             }
             return;
@@ -1688,6 +1804,62 @@ class Scene3D {
         return {center: {x: 0, y: 0, z: 0}, size: {x, y, z}};
     }
 
+    /**
+     * @param {Target3D} target
+     * @returns {?{key: string, vertices: Float32Array, indices: Uint32Array}} the triangles of the sprite's model,
+     * relative to the sprite and before its scale, with duplicate vertices merged. Shared by every sprite with the same
+     * model; null while the model loads or if it has no triangles.
+     */
+    getModelGeometry (target) {
+        const model = target.getCurrentModel && target.getCurrentModel();
+        if (!model || target.isCamera) return null;
+        loadThree();
+        if (!model.file) {
+            const shape = SHAPES.includes(model.shape) ? model.shape : 'cube';
+            const key = `shape:${shape}`;
+            if (!this._modelGeometries.has(key)) {
+                this._modelGeometries.set(key, mergeTriangles(key, [{
+                    geometry: this.getGeometry(shape),
+                    matrix: new THREE.Matrix4()
+                }]));
+            }
+            return this._modelGeometries.get(key);
+        }
+        const file = this.runtime.fileManager.getFile(model.file);
+        if (!file || !MODEL_EXTENSION.test(file.name)) return null;
+        const key = `file:${this._modelKey(file)}`;
+        if (!this._modelGeometries.has(key)) {
+            const scene = this._loadedModels.get(this._modelKey(file));
+            if (!scene) {
+                if (scene !== false) this.getModel(model.file);
+                return null;
+            }
+            // The loaded model itself, not a sprite's copy, so that it is at rest, not in the middle of an animation.
+            // Placed like updateTargetModel places copies: turned to face the sprite's front.
+            const root = new THREE.Object3D();
+            root.position.copy(scene.position);
+            root.rotation.copy(scene.rotation);
+            root.rotation.y += Math.PI;
+            root.scale.copy(scene.scale);
+            root.updateMatrix();
+            scene.updateMatrixWorld(true);
+            const toRoot = new THREE.Matrix4().multiplyMatrices(root.matrix,
+                new THREE.Matrix4().copy(scene.matrixWorld)
+                    .invert());
+            const meshes = [];
+            scene.traverse(child => {
+                if (child.isMesh && child.geometry && child.geometry.attributes.position) {
+                    meshes.push({
+                        geometry: child.geometry,
+                        matrix: new THREE.Matrix4().multiplyMatrices(toRoot, child.matrixWorld)
+                    });
+                }
+            });
+            this._modelGeometries.set(key, mergeTriangles(key, meshes));
+        }
+        return this._modelGeometries.get(key);
+    }
+
     // GLTF animations (ROADMAP.md 6.4). Each sprite keeps what it plays and how far it is (target.animation), so that
     // blocks work the same whether or not three.js draws the scene; the model's AnimationMixer only shows it.
 
@@ -1999,33 +2171,52 @@ class Scene3D {
 
     /**
      * Find the 3D sprite at a point of the stage, for clicks and the mouse (ROADMAP.md 6.2): the first one that the
-     * ray from the camera through that point hits. Uses the models when three.js draws the scene, and the colliders
-     * otherwise (see Physics3D).
+     * ray from the camera through that point hits. Sprites that let the mouse through (Target3D.blocksMouse) don't
+     * block the ray, and aren't tested at all, which also keeps picking fast in big scenes.
      * @param {number} stageX Scratch x on the stage
      * @param {number} stageY Scratch y on the stage
      * @returns {?Target3D} the sprite or clone, or null if there is none there
      */
     pickTarget (stageX, stageY) {
+        const hit = this.pickHit(stageX, stageY, target => !target.blocksMouse());
+        return hit ? hit.target : null;
+    }
+
+    /**
+     * Find where the ray from the camera through a point of the stage first hits a 3D sprite. Uses the models when
+     * three.js draws the scene, and the colliders otherwise (see Physics3D).
+     * @param {number} stageX Scratch x on the stage
+     * @param {number} stageY Scratch y on the stage
+     * @param {function(Target3D): boolean} [skip] true for sprites that the ray goes through
+     * @returns {?{target: Target3D, distance: number, point: {x: number, y: number, z: number}}} the closest hit
+     */
+    pickHit (stageX, stageY, skip) {
         if (this.targets.size === 0) return null;
         const raycaster = this._stageRaycaster(stageX, stageY);
+        const ignore = target => target.isCamera || !this._isShown(target) || (!!skip && skip(target));
         if (this.three) {
             this.flushTransforms();
             const objects = [];
             for (const target of this.targets) {
-                if (target.object3D && !target.isCamera && this._isShown(target)) objects.push(target.object3D);
+                if (target.object3D && !ignore(target)) objects.push(target.object3D);
             }
             for (const hit of raycaster.intersectObjects(objects, true)) {
                 let object = hit.object;
                 while (object && !object.userData.twTarget) object = object.parent;
                 const target = object && object.userData.twTarget;
-                if (target && !target.isCamera && this._isShown(target)) return target;
+                if (target && !ignore(target)) {
+                    return {
+                        target,
+                        distance: hit.distance,
+                        point: {x: hit.point.x, y: hit.point.y, z: hit.point.z}
+                    };
+                }
             }
             return null;
         }
         if (!this.physics.ready) return null;
         const ray = raycaster.ray;
-        const hit = this.physics.raycast(ray.origin, ray.direction, 1e5, null);
-        return hit ? hit.target : null;
+        return this.physics.raycast(ray.origin, ray.direction, 1e5, ignore);
     }
 
     /**
@@ -2044,7 +2235,8 @@ class Scene3D {
         if (!this.physics.ready) return false;
         const shape = this.physics.getShape(target);
         const ray = new this.physics.RAPIER.Ray(raycaster.ray.origin, raycaster.ray.direction);
-        return !!shape && shape.shape.castRay(ray, shape.position, shape.rotation, 1e5, true) !== null;
+        // Rapier reports a miss as -1
+        return !!shape && shape.shape.castRay(ray, shape.position, shape.rotation, 1e5, true) >= 0;
     }
 
     /**

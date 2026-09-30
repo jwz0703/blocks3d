@@ -507,6 +507,49 @@ class Target3D extends RenderedTarget {
     }
 
     /**
+     * With mouse mode 'auto', the mouse stops at 3D sprites that have their own click or mouse hats, can be dragged,
+     * or are visible solid things (they take part in collision): walls and the ground hide what is behind them.
+     * Decorations that don't collide (leaves, dust, light beams) let the mouse through.
+     * @returns {boolean} true if the mouse stops at this sprite
+     */
+    blocksMouse () {
+        if (this.mouseMode !== 'auto') return this.mouseMode === 'block';
+        if (this.isCamera) return false;
+        return this.draggable || this.blocks.hasMouseScripts() || (this.visible && this.physics.collide !== false);
+    }
+
+    /**
+     * Turn around an axis through the sprite's origin. Turns add up however the sprite already faces, e.g. for a ball
+     * rolling one way and then another.
+     * @param {{x: number, y: number, z: number}} axis which way the axis points; its length doesn't matter
+     * @param {number} degrees how far, counterclockwise looking down the axis at the sprite (right-hand rule)
+     * @param {boolean} local true for an axis of the sprite itself (x: its right, y: its up, z: its back), false
+     * for an axis of the world
+     */
+    rotateAround (axis, degrees, local) {
+        const THREE = this.runtime.scene3D.THREE;
+        const direction = new THREE.Vector3(finite(axis.x, 0), finite(axis.y, 0), finite(axis.z, 0));
+        degrees = finite(degrees, 0);
+        if (direction.lengthSq() === 0 || degrees === 0) return;
+        const rotation = new THREE.Quaternion().setFromEuler(
+            new THREE.Euler(this.rotationX * DEG, this.rotationY * DEG, this.rotationZ * DEG, 'YXZ'));
+        if (local) {
+            rotation.multiply(new THREE.Quaternion().setFromAxisAngle(direction.normalize(), degrees * DEG));
+        } else {
+            if (this.parent3D) {
+                // Angles are relative to the parent, so the axis is too
+                const parentRotation = new THREE.Quaternion();
+                this.parent3D.getWorldMatrix().decompose(new THREE.Vector3(), parentRotation, new THREE.Vector3());
+                direction.applyQuaternion(parentRotation.invert());
+            }
+            rotation.premultiply(new THREE.Quaternion().setFromAxisAngle(direction.normalize(), degrees * DEG));
+        }
+        const euler = new THREE.Euler().setFromQuaternion(rotation, 'YXZ');
+        const clean = n => Math.round(n * 1e9) / 1e9;
+        this.setRotation(clean(euler.x / DEG), clean(euler.y / DEG), clean(euler.z / DEG));
+    }
+
+    /**
      * Turn to face a point in the world, keeping the roll.
      * @param {number} x
      * @param {number} y
@@ -732,6 +775,7 @@ class Target3D extends RenderedTarget {
         newClone.y = this.y;
         newClone.direction = this.direction;
         newClone.draggable = this.draggable;
+        newClone.mouseMode = this.mouseMode;
         newClone.visible = this.visible;
         newClone.size = this.size;
         newClone.currentCostume = this.currentCostume;

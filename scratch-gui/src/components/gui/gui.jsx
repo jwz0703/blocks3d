@@ -14,6 +14,7 @@ import CostumeTab from '../../containers/costume-tab.jsx';
 import ModelTab from '../../containers/tw-model-tab.jsx';
 import TargetPane from '../../containers/target-pane.jsx';
 import FileTab from '../../containers/tw-file-tab.jsx';
+import ComponentTab from '../../containers/tw-component-tab.jsx';
 import StageWrapper from '../../containers/stage-wrapper.jsx';
 import StageResizer from '../../containers/tw-stage-resizer.jsx';
 import Loader from '../loader/loader.jsx';
@@ -129,6 +130,7 @@ const GUIComponent = props => {
         onOpenRegistration,
         onToggleLoginOpen,
         onActivateCostumesTab,
+        onActivateComponentTab,
         onActivateFilesTab,
         onActivateTab,
         onClickLogo,
@@ -149,6 +151,8 @@ const GUIComponent = props => {
         showComingSoon,
         showOpenFilePicker,
         showSaveFilePicker,
+        componentTabAvailable,
+        componentTabVisible,
         filesTabVisible,
         stageDisplayWidth,
         stageSizeMode,
@@ -382,6 +386,19 @@ const GUIComponent = props => {
                                         />
                                         {'檔案'}
                                     </Tab>
+                                    {/* Always there, so that it stays after the other tabs when the find bar of
+                                        the addons is put in the list; hidden when the sprite isn't a component */}
+                                    <Tab
+                                        className={tabClassNames.tab}
+                                        style={componentTabAvailable ? void 0 : {display: 'none'}}
+                                        onClick={onActivateComponentTab}
+                                    >
+                                        <img
+                                            draggable={false}
+                                            src={filesIcon()}
+                                        />
+                                        {'元件'}
+                                    </Tab>
                                 </TabList>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     <Box className={styles.blocksWrapper}>
@@ -450,6 +467,9 @@ const GUIComponent = props => {
                                 </TabPanel>
                                 <TabPanel className={tabClassNames.tabPanel}>
                                     {filesTabVisible ? <FileTab vm={vm} /> : null}
+                                </TabPanel>
+                                <TabPanel className={tabClassNames.tabPanel}>
+                                    {componentTabAvailable && componentTabVisible ? <ComponentTab vm={vm} /> : null}
                                 </TabPanel>
                             </Tabs>
                             {backpackVisible ? (
@@ -524,6 +544,7 @@ GUIComponent.propTypes = {
     loading: PropTypes.bool,
     logo: PropTypes.string,
     onActivateCostumesTab: PropTypes.func,
+    onActivateComponentTab: PropTypes.func,
     onActivateFilesTab: PropTypes.func,
     onActivateTab: PropTypes.func,
     onClickAccountNav: PropTypes.func,
@@ -554,6 +575,8 @@ GUIComponent.propTypes = {
     showComingSoon: PropTypes.bool,
     showOpenFilePicker: PropTypes.func,
     showSaveFilePicker: PropTypes.func,
+    componentTabAvailable: PropTypes.bool,
+    componentTabVisible: PropTypes.bool,
     filesTabVisible: PropTypes.bool,
     stageDisplayWidth: PropTypes.number,
     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)),

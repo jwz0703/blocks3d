@@ -1,6 +1,7 @@
 import {defineMessages} from 'react-intl';
 import {defaultEnvironment} from 'scratch-vm/src/engine/scene-3d-environment';
 import sharedMessages from '../shared-messages';
+import {DEFAULT_SHAPE_COLOR} from '../../components/tw-3d/shapes';
 
 let messages = defineMessages({
     variable: {
@@ -17,7 +18,7 @@ const defaultTranslator = msgObj => msgObj.defaultMessage;
 
 /**
  * Generate a localized version of the default project: a .3dsb project with a procedural sky, a camera sprite
- * looking at the origin from a little above, and the 2D sprite of Scratch.
+ * looking at the origin from a little above, and a cube.
  * @param {function} translateFunction a function to use for translating the default names
  * @return {object} the project data json for the default project
  */
@@ -58,34 +59,25 @@ const projectData = translateFunction => {
             },
             {
                 isStage: false,
-                name: translator(messages.sprite, {index: 1}),
-                kind: '2d',
+                name: '方塊',
+                kind: '3d',
                 variables: {},
                 lists: {},
                 broadcasts: {},
                 blocks: {},
                 comments: {},
-                currentCostume: 0,
-                costumes: [
-                    {
-                        assetId: '927d672925e7b99f7813735c484c6922',
-                        name: translator(messages.costume, {index: 1}),
-                        bitmapResolution: 1,
-                        md5ext: '927d672925e7b99f7813735c484c6922.svg',
-                        dataFormat: 'svg',
-                        rotationCenterX: 30.74937882782359,
-                        rotationCenterY: 58.864768144346826
-                    }
-                ],
+                // 3D sprites save no costumes; they get their picture when loaded
+                costumes: [],
                 sounds: [],
                 volume: 100,
-                visible: true,
-                x: 0,
-                y: 0,
-                size: 100,
-                direction: 90,
                 draggable: false,
-                rotationStyle: 'all around'
+                position: {x: 0, y: 0, z: 0},
+                rotation: {x: 0, y: 0, z: 0},
+                scale: {x: 1, y: 1, z: 1},
+                visible: true,
+                models: [{name: '方塊', shape: 'cube'}],
+                currentModel: 0,
+                material: {color: DEFAULT_SHAPE_COLOR}
             },
             {
                 isStage: false,

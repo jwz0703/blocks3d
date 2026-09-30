@@ -381,6 +381,17 @@ runtimeFunctions.timer = `const timer = () => {
 runtimeFunctions.daysSince2000 = `const daysSince2000 = () => (Date.now() - 946684800000) / (24 * 60 * 60 * 1000)`;
 
 /**
+ * @param {Target} target
+ * @param {number} axis 0 for x, 1 for y
+ * @returns {number} the mouse in the coordinates of the target: on the stage, or in its component
+ */
+runtimeFunctions.localMouse = `const localMouse = (target, axis) => {
+    const mouse = target.runtime.ioDevices.mouse;
+    if (!target.componentOwner && !target.sprite.component) return axis === 0 ? mouse.getScratchX() : mouse.getScratchY();
+    return target.stageToComponent(mouse.getScratchX(), mouse.getScratchY())[axis];
+}`;
+
+/**
  * Determine distance to a sprite or point.
  * @param {string} menu The name of the sprite or location to find.
  * @returns {number} Distance to the point, or 10000 if it cannot be calculated.
@@ -400,6 +411,7 @@ runtimeFunctions.distance = `const distance = menu => {
         ({x: targetX, y: targetY} = distTarget.getStagePosition());
     }
 
+    [targetX, targetY] = thread.target.stageToLocal(targetX, targetY);
     const dx = thread.target.x - targetX;
     const dy = thread.target.y - targetY;
     return Math.sqrt((dx * dx) + (dy * dy));

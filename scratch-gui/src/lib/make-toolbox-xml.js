@@ -1,5 +1,9 @@
 import LazyScratchBlocks from './tw-lazy-scratch-blocks';
 import {defaultBlockColors} from './themes';
+import {SKY_EXTENSIONS} from 'scratch-vm/src/engine/scene-3d-environment';
+
+// The block extensions of the kinds of sky, in palette order
+const SKY_EXTENSION_IDS = Array.from(new Set(Object.values(SKY_EXTENSIONS)));
 
 const categorySeparator = '<sep gap="36"/>';
 
@@ -937,11 +941,124 @@ const xmlClose = '</xml>';
  * @param {?object} colors - The colors for the theme.
  * @param {object} [options] - About the target:
  * @param {boolean} [options.is3D] - Whether the target is a 3D sprite: its motion and looks are the 3D ones.
+ * @param {string[]} [options.skyExtensions] - IDs of the sky extensions that backdrops of the project use
  * @param {boolean} [options.has3D] - Whether the project has 3D sprites, so that 2D sprites can use the blocks
  * that follow them.
  * @param {function(string): boolean} [options.isInPalette] - opcode → whether the target's palette shows it.
  * @returns {string} - a ScratchBlocks-style XML document for the contents of the toolbox.
  */
+const INTERFACE_COLOR = '#1f9e8f';
+const INTERFACE_SECONDARY = '#16756a';
+
+/**
+ * @param {{id: string, proccode: string, params: Array<{id: string, name: string}>}} output of a component
+ * @param {string} sprite for the blocks that hear it: the instance that says it, or `_any_` and the component
+ * @returns {string} the mutation of a block of it (see lib/tw-component-blocks.js)
+ */
+const outputMutation = (output, sprite) => `<mutation port="${xmlEscape(output.id)}" ` +
+    `proccode="${xmlEscape(output.proccode)}" ` +
+    `argumentids="${xmlEscape(JSON.stringify(output.params.map(p => p.id)))}" ` +
+    `argumentnames="${xmlEscape(JSON.stringify(output.params.map(p => p.name)))}" ` +
+    `${sprite ? `sprite="${xmlEscape(sprite)}" ` : ''}generateshadows="true"></mutation>`;
+
+/**
+ * Public interfaces of sprites (ROADMAP.md 階段 10, scratch-vm engine/sprite-interface.js): the sprite's own 介面
+ * category (its events and the blocks that send them), and a category for each other sprite that has an interface
+ * (when it sends an event, and calls of its public custom blocks).
+ * @param {?object} interfaces from blocks.jsx: {own: ?{events: string[], publicNames: string[], props: ?string[]},
+ * others: [{name, events: string[], procedures: [{id, proccode, argumentIds, returns}], component: ?{instances:
+ * string[], props: string[], outputs: Array<object>}}]}; own.props (and own.outputs) is there for instances of
+ * components and the sprites in them, others[].component for components
+ * @returns {{own: string, events: string, others: string[]}} category XML, and blocks for the end of 事件
+ */
+const interfaceCategories = interfaces => {
+    const result = {own: '', events: '', others: []};
+    if (!interfaces) return result;
+    const category = (name, id, contents) => `<category name="${xmlEscape(name)}" id="${xmlEscape(id)}" ` +
+        `colour="${INTERFACE_COLOR}" secondaryColour="${INTERFACE_SECONDARY}">${contents}</category>`;
+    const field = (name, value) => `<field name="${name}">${xmlEscape(value)}</field>`;
+    if (interfaces.own) {
+        // Events are broadcast like messages: 「廣播事件 [ ]」 at the end of 事件, made from its menu (新事件…).
+        // A component says things with its outputs instead (below)
+        const first = interfaces.own.events[0] || '';
+        if (!interfaces.own.props) {
+            result.events = `<block type="twiface_emit">${field('EVENT', first)}</block>` +
+                `<block type="twiface_emitAndWait">${field('EVENT', first)}</block>` +
+                `<block type="twiface_emitValue">${field('EVENT', first)}<value name="VALUE"><shadow type="text">` +
+                `${field('TEXT', '10')}</shadow></value></block>`;
+        }
+        if (interfaces.own.props) {
+            // Inside a component: its properties, like variables
+            const props = interfaces.own.props;
+            const prop = field('PROP', props[0] || '');
+            let contents = '<button text="建立一個屬性" callbackKey="TWCOMP_MAKE_PROP"></button>';
+            if (props.length) {
+                // One block, the property picked in its menu
+                contents += `<block type="twcomp_prop">${prop}</block>` +
+                    `<block type="twcomp_setProp">${prop}<value name="VALUE">` +
+                    `<shadow type="text">${field('TEXT', '')}</shadow></value></block>` +
+                    `<block type="twcomp_whenPropChanged">${prop}</block>`;
+            }
+            // There is no green flag in a component: it starts when it appears
+            contents += '<sep gap="36"/><block type="twcomp_whenCreated"></block>' +
+                '<block type="twcomp_thisInstance"></block>' +
+                '<block type="twcomp_stageMouseX"></block><block type="twcomp_stageMouseY"></block>';
+            // Outputs, made like custom blocks: one block for each (right-click to edit)
+            contents += '<sep gap="36"/><button text="建立一個輸出" callbackKey="TWCOMP_MAKE_OUTPUT"></button>';
+            for (const output of interfaces.own.outputs || []) {
+                for (const type of ['twcomp_emit', 'twcomp_emitAndWait']) {
+                    contents += `<block type="${type}">${outputMutation(output, '')}</block>`;
+                }
+            }
+            result.own = category('元件', 'twcomp', contents);
+        }
+    }
+    for (const other of interfaces.others) {
+        let contents = '';
+        const component = other.component;
+        // A component: its instances (the first one in the blocks), or any of them
+        const sender = component ? (component.instances[0] || `_any_${other.name}`) : other.name;
+        if (!component) {
+            for (const event of other.events) {
+                contents += `<block type="twiface_whenEvent">${field('SPRITE', sender)}` +
+                    `${field('EVENT', event)}</block>`;
+            }
+            if (other.events.length) {
+                contents += '<block type="twiface_source"></block><block type="twiface_sourceId"></block>' +
+                    '<block type="twiface_value"></block>';
+            }
+        }
+        if (component) {
+            // What the component says: "when [instance] says [output]", with its arguments to drag out
+            for (const output of component.outputs || []) {
+                contents += `<block type="twcomp_whenOutput">${outputMutation(output, sender)}</block>`;
+            }
+            if (component.outputs && component.outputs.length && component.instances.length) {
+                contents += `<block type="twcomp_whenOutput">${outputMutation(component.outputs[0],
+                    `_any_${other.name}`)}</block>`;
+            }
+            const instance = `<value name="INSTANCE"><shadow type="twcomp_menu_instances">` +
+                `${field('instances', component.instances[0] || '')}</shadow></value>`;
+            const prop = component.props.length ? field('PROP', component.props[0]) : '';
+            if (component.props.length) {
+                contents += `<block type="twcomp_instanceProp">${instance}${prop}</block>`;
+            }
+            contents += `<block type="twcomp_allInstances">${field('COMPONENT', other.name)}</block>` +
+                `<block type="twcomp_spawn">${field('COMPONENT', other.name)}<value name="NAME"><shadow type="text">` +
+                `${field('TEXT', '')}</shadow></value></block>`;
+        }
+        for (const procedure of other.procedures) {
+            const type = procedure.returns ? 'procedures_callsprite_reporter' : 'procedures_callsprite';
+            contents += `<block type="${type}"><mutation sprite="${xmlEscape(sender)}" ` +
+                `proccode="${xmlEscape(procedure.proccode)}" ` +
+                `argumentids="${xmlEscape(JSON.stringify(procedure.argumentIds))}" ` +
+                `prototypeid="${xmlEscape(procedure.id)}" generateshadows="true"></mutation></block>`;
+        }
+        result.others.push(category(other.name, `twiface_${other.name}`, contents));
+    }
+    return result;
+};
+
 const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categoriesXML = [],
     costumeName = '', backdropName = '', soundName = '', colors = defaultBlockColors, options = {}) {
     isStage = isInitialSetup || isStage;
@@ -989,7 +1106,13 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
     if (is3D) soundXML = appendToCategory(soundXML, sound3DXML);
     // The mouse moving onto and off sprites (built-in event3d), for sprites
     const events3DXML = moveCategory('event3d');
+    const interfaceXML = interfaceCategories(options.interfaces);
     let eventsXML = moveCategory('event') || events(isInitialSetup, isStage, targetId, colors.event);
+    if (!isStage && interfaceXML.events) eventsXML = appendToCategory(eventsXML, interfaceXML.events);
+    // The green flag starts nothing in a component (it has "when the component is created" instead)
+    if (options.interfaces && options.interfaces.own && options.interfaces.own.props) {
+        eventsXML = eventsXML.replace('<block type="event_whenflagclicked"/>', '');
+    }
     if (!isStage) eventsXML = appendToCategory(eventsXML, events3DXML);
     // Size of the screen (built-in screen): the hat goes at the end of Events, the reporter at the end of Sensing
     const screenXML = moveCategory('screen');
@@ -999,11 +1122,32 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         return match ? match[0] : '';
     };
     if (screenXML) eventsXML = appendToCategory(eventsXML, screenBlock('whenresized'));
+    // The wheel, taps, clicks and the cursor (built-in twmouse): the hats go at the end of Events, the rest at the
+    // end of Sensing. Sprites are tapped, and so is the stage; the mouse always stops at the stage.
+    const mouseXML = moveCategory('twmouse');
+    const mouseBlocks = opcodes => {
+        if (!mouseXML) return '';
+        return opcodes.map(opcode => {
+            const match = mouseXML.match(new RegExp(`<block type="twmouse_${opcode}"[\\s\\S]*?</block>`));
+            return match ? match[0] : '';
+        }).join('');
+    };
+    if (mouseXML) {
+        eventsXML = appendToCategory(eventsXML,
+            mouseBlocks(['whenwheel', isStage ? 'whenstagetapped' : 'whentapped']));
+    }
     let controlXML = moveCategory('control') || control(isInitialSetup, isStage, targetId, colors.control);
     let sensingXML = moveCategory('sensing') || sensing(isInitialSetup, isStage, targetId, colors.sensing,
         sensing3DXML && (use3D || options.has3D) ? categoryContents(sensing3DXML) : null);
     if (screenXML) sensingXML = appendToCategory(sensingXML, screenBlock('size'));
-    const operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
+    if (mouseXML) {
+        sensingXML = appendToCategory(sensingXML, mouseBlocks(isStage ?
+            ['wheel', 'pointed', 'setcursor'] :
+            ['wheel', 'pointed', 'setmousemode', 'setcursor']));
+    }
+    let operatorsXML = moveCategory('operators') || operators(isInitialSetup, isStage, targetId, colors.operators);
+    // atan2, clamp, min, max and lerp (built-in twmath) go at the end of Operators
+    operatorsXML = appendToCategory(operatorsXML, moveCategory('twmath'));
     // 資料 (built-in twdata: global variables with paths, arrays and objects) replaces the old "Make a Variable" category
     const variablesXML = moveCategory('twdata') || moveCategory('data') ||
         variables(isInitialSetup, isStage, targetId, colors.data);
@@ -1018,6 +1162,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         controlXML = `${controlXML.slice(0, end)}${cloneBlocks}${categorySeparator}${controlXML.slice(end)}`;
     }
     const myBlocksXML = moveCategory('procedures') || myBlocks(isInitialSetup, isStage, targetId, colors.more);
+    // 介面 (built-in twiface and twcomp): categories made from the interfaces of sprites and components
+    moveCategory('twiface');
+    moveCategory('twcomp');
     // 區域變數 (built-in twlocalvars) have no category of their own: blocks.jsx adds them to the My Blocks flyout
     moveCategory('twlocalvars');
 
@@ -1033,6 +1180,11 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
             `<block type="camera3d_fov" id="${xmlEscape(targetId)}_camera3d_fov"`);
     }
     const environmentXML = moveCategory('environment3d');
+    // Then the blocks of each kind of sky (built-in sky extensions) that a backdrop of the project has
+    const skyXMLs = SKY_EXTENSION_IDS
+        .map(id => ({id, xml: moveCategory(id)}))
+        .filter(sky => sky.xml && options.skyExtensions && options.skyExtensions.includes(sky.id))
+        .map(sky => sky.xml);
     // 物理 (built-in physics3d): collision and physics of 3D sprites; every target can cast rays
     const physicsXML = moveCategory('physics3d');
     // 程序物件 (three3d, from the extension library) comes next when it is loaded
@@ -1056,6 +1208,9 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
         myBlocksXML
     ];
 
+    if (interfaceXML.own) everything.push(gap, interfaceXML.own);
+    for (const otherXML of interfaceXML.others) everything.push(gap, otherXML);
+
     if (filesXML) {
         everything.push(gap, filesXML);
     }
@@ -1066,6 +1221,10 @@ const makeToolboxXML = function (isInitialSetup, isStage = true, targetId, categ
 
     if (environmentXML) {
         everything.push(gap, environmentXML);
+    }
+
+    for (const skyXML of skyXMLs) {
+        everything.push(gap, skyXML);
     }
 
     if (physicsXML) {

@@ -28,7 +28,10 @@ require('canvas-toBlob');
 const {exportCostume} = require('./serialization/tw-costume-import-export');
 const Base64Util = require('./util/base64-util');
 const BlockSupport = require('./engine/block-support');
+const Blocks = require('./engine/blocks');
 const Screen = require('./engine/screen');
+const StageUndo = require('./engine/stage-undo');
+const {setCostumeSource, renderableSvg} = require('./engine/svg-bindings');
 
 const RESERVED_NAMES = ['_mouse_', '_stage_', '_edge_', '_myself_', '_random_'];
 
@@ -49,6 +52,10 @@ const CORE_EXTENSIONS = [
     'twdata',
     // Variables of sprites and clones, and clones by id; shown in Control
     'twclonevars',
+    // Events of the public interface of sprites (engine/sprite-interface.js); the GUI makes their categories
+    'twiface',
+    // Properties of instances of components (engine/components.js); the GUI puts them in the 介面 categories
+    'twcomp',
     // Local variables of custom blocks; shown in My Blocks
     'twlocalvars',
     // Blocks of 3D sprites; the palette only shows them for 3D sprites
@@ -58,13 +65,22 @@ const CORE_EXTENSIONS = [
     // Cameras and the environment of the current backdrop, for every target
     'camera3d',
     'environment3d',
+    // Blocks of each kind of sky; the palette only shows them when a backdrop has that kind of sky
+    'skyprocedural',
+    'skycolor',
+    'skyhdri',
     // Collision and physics of 3D sprites; raycasts and gravity for every target
     'physics3d',
     // Mouse over sprites, shown in Events; 3D sound, shown in Sound for 3D sprites
     'event3d',
     'sound3d',
     // Size of the screen: the reporter is shown in Sensing, the hat in Events
-    'screen'
+    'screen',
+    // The wheel, taps, clicks going through sprites, what the mouse points at and the cursor: the hats are shown in
+    // Events, the other blocks in Sensing
+    'twmouse',
+    // atan2, clamp, min, max and lerp: shown at the end of Operators
+    'twmath'
 ];
 
 // Disable missing translation warnings in console
@@ -175,6 +191,11 @@ class VirtualMachine extends EventEmitter {
         this.runtime.on(Runtime.BLOCKS_NEED_UPDATE, () => {
             this.emitWorkspaceUpdate();
         });
+        // Editing a component is only for editing: the green flag goes back to the whole project first
+        this.runtime.on(Runtime.PROJECT_START, () => {
+            if (this.runtime.components.editScope) this.exitComponent(true);
+        });
+        this.runtime.components.onMembersSynced = () => this.refreshComponentEditView();
         this.runtime.on(Runtime.TOOLBOX_EXTENSIONS_NEED_UPDATE, () => {
             this.extensionManager.refreshBlocks();
         });
@@ -798,6 +819,79 @@ class VirtualMachine extends EventEmitter {
     }
 
     /**
+     * Export a component on its own (a .3dsc file): a zip with component.json and the costumes and sounds of the
+     * component and the components in it.
+     * @param {string} targetId an instance of the component, or a sprite in one
+     * @param {string=} optZipType see exportSprite
+     * @returns {Promise} the zip
+     */
+    exportComponent (targetId, optZipType) {
+        const tw3dsb = require('./serialization/3dsb');
+        const target = this.runtime.getTargetById(targetId);
+        if (!target) return Promise.reject(new Error('No such sprite'));
+        const {json, files} = tw3dsb.serializeComponentFile(this.runtime, target);
+        const zip = new JSZip();
+        zip.file('component.json', StringUtil.stringify(json));
+        const wanted = new Set(files);
+        const descs = this.serializeAssets().filter(desc => wanted.has(desc.fileName));
+        this._addFileDescsToZip(descs, zip);
+        return zip.generateAsync({
+            type: typeof optZipType === 'string' ? optZipType : 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: {
+                level: 6
+            }
+        });
+    }
+
+    /**
+     * @param {ArrayBuffer|Uint8Array} input a file that is being added as a sprite
+     * @returns {Promise<boolean>} true if it is a component file (.3dsc), not a sprite
+     */
+    async isComponentFile (input) {
+        try {
+            const zip = await JSZip.loadAsync(input);
+            return !!zip.file('component.json');
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /**
+     * @param {ArrayBuffer|Uint8Array} input a .3dsc file
+     * @returns {Promise<{name: string, props: string[], inputs: string[], outputs: string[], components: string[],
+     * extensions: string[]}>} what is in it (the properties, inputs and outputs of the component, the components in
+     * it and the extensions it uses), to ask about before it is added
+     */
+    async describeComponentFile (input) {
+        const tw3dsb = require('./serialization/3dsb');
+        const zip = await JSZip.loadAsync(input);
+        const entry = zip.file('component.json');
+        if (!entry) throw new Error('component.json is not in the file');
+        return tw3dsb.describeComponentFile(JSON.parse(await entry.async('string')));
+    }
+
+    /**
+     * Add a component from a .3dsc file (from exportComponent). The project's own components, names and data stay as
+     * they are: the ones with the same ids or names get others. While a component is being edited, it goes into it.
+     * @param {ArrayBuffer|Uint8Array} input the file
+     * @returns {Promise<string>} id of the instance that was added
+     */
+    async importComponent (input) {
+        const tw3dsb = require('./serialization/3dsb');
+        const zip = await JSZip.loadAsync(input);
+        const entry = zip.file('component.json');
+        if (!entry) throw new Error('component.json is not in the file');
+        const project = tw3dsb.componentFileToProject(JSON.parse(await entry.async('string')), this.runtime);
+        const {targets, extensions} = await tw3dsb.deserialize(project, this.runtime, zip, false);
+        const added = targets.filter(target => !target.isStage);
+        await this.installTargets(added, extensions, false, false);
+        this.runtime.emitProjectChanged();
+        const root = added.find(target => target.sprite && target.sprite.component && !target.componentOwner);
+        return root ? root.id : (added[0] && added[0].id);
+    }
+
+    /**
      * Export the project as .3dsb project.json, or a sprite as sprite.json.
      * @param {string=} optTargetId - Optional id of a sprite to serialize
      * @param {*} serializationOptions Options to pass to the serializer
@@ -941,9 +1035,19 @@ class VirtualMachine extends EventEmitter {
             targets.forEach(target => {
                 this.runtime.addTarget(target);
                 (/** @type RenderedTarget */ target).updateAllDrawableProperties();
-                // Ensure unique sprite name
-                if (target.isSprite()) this.renameSprite(target.id, target.getName());
+                // Ensure unique sprite name (members of components have names of their own inside them)
+                if (target.isSprite() && !target.componentOwner) this.renameSprite(target.id, target.getName());
             });
+            // Sprites added while a component is being edited go into it
+            const scope = this.runtime.components.editScope;
+            if (!wholeProject && scope) {
+                for (const target of targets) {
+                    if (target.isSprite() && !target.componentOwner) {
+                        this.runtime.components.adoptMember(scope, target);
+                    }
+                }
+                this.refreshComponentEditView();
+            }
             // Sort the executable targets by layerOrder.
             // Remove layerOrder property after use.
             this.runtime.executableTargets.sort((a, b) => a.layerOrder - b.layerOrder);
@@ -1068,6 +1172,16 @@ class VirtualMachine extends EventEmitter {
      */
     isBlockUnsupported (opcode, kind) {
         return BlockSupport.getBlockSupport(opcode, kind).support === BlockSupport.HIDE;
+    }
+
+    /**
+     * @param {string} opcode
+     * @param {?Target} target
+     * @returns {boolean} true if it is a hat that the mouse starts, and the mouse goes through the target, so that it
+     * never starts there
+     */
+    isMouseHatIgnored (opcode, target) {
+        return !!target && !target.isStage && Blocks.MOUSE_HATS.includes(opcode) && target.mouseMode === 'pass';
     }
 
     /**
@@ -1611,6 +1725,7 @@ class VirtualMachine extends EventEmitter {
     _updateBitmap (costume, bitmap, rotationCenterX, rotationCenterY, bitmapResolution) {
         if (!(costume && this.runtime && this.runtime.renderer)) return;
         if (costume && costume.broken) delete costume.broken;
+        delete costume.svgBindingSource;
 
         costume.rotationCenterX = rotationCenterX;
         costume.rotationCenterY = rotationCenterY;
@@ -1681,7 +1796,8 @@ class VirtualMachine extends EventEmitter {
         if (costume && this.runtime && this.runtime.renderer) {
             costume.rotationCenterX = rotationCenterX;
             costume.rotationCenterY = rotationCenterY;
-            this.runtime.renderer.updateSVGSkin(costume.skinId, svg, [rotationCenterX, rotationCenterY]);
+            setCostumeSource(costume, svg);
+            this.runtime.renderer.updateSVGSkin(costume.skinId, renderableSvg(svg), [rotationCenterX, rotationCenterY]);
             costume.size = this.runtime.renderer.getSkinSize(costume.skinId);
         }
         const storage = this.runtime.storage;
@@ -1738,7 +1854,28 @@ class VirtualMachine extends EventEmitter {
             if (newName && RESERVED_NAMES.indexOf(newName) === -1) {
                 const names = this.runtime.targets
                     .filter(runtimeTarget => runtimeTarget.isSprite() && runtimeTarget.id !== target.id)
-                    .map(runtimeTarget => runtimeTarget.sprite.name);
+                    .map(runtimeTarget => runtimeTarget.getName());
+                if (sprite.component) {
+                    // An instance of a component has a name of its own
+                    const oldInstanceName = target.getName();
+                    const instanceNames = this.runtime.targets
+                        .filter(t => t.isOriginal && !t.isStage && t !== target)
+                        .map(t => t.getName());
+                    const newInstanceName = StringUtil.unusedName(newName, instanceNames);
+                    if (newInstanceName === oldInstanceName) return;
+                    for (const clone of sprite.clones) {
+                        if (clone.instanceName === oldInstanceName) clone.instanceName = newInstanceName;
+                    }
+                    target.instanceName = newInstanceName;
+                    this.runtime.components.renameInstance(oldInstanceName, newInstanceName);
+                    for (const currTarget of this.runtime.targets) {
+                        currTarget.blocks.updateAssetName(oldInstanceName, newInstanceName, 'sprite');
+                    }
+                    this.emitTargetsUpdate();
+                    // Not while loading a project (nothing is being edited yet)
+                    if (this.editingTarget) this.emitWorkspaceUpdate();
+                    return;
+                }
                 const oldName = sprite.name;
                 const newUnusedName = StringUtil.unusedName(newName, names);
                 sprite.name = newUnusedName;
@@ -1750,12 +1887,56 @@ class VirtualMachine extends EventEmitter {
                     const currTarget = allTargets[i];
                     currTarget.blocks.updateAssetName(oldName, newName, 'sprite');
                 }
+                // "when [sprite] [event]" hats
+                this.runtime.spriteInterfaces.renameSprite(oldName, newUnusedName);
 
                 if (newUnusedName !== oldName) this.emitTargetsUpdate();
             }
         } else {
             throw new Error('No target with the provided id.');
         }
+    }
+
+    /**
+     * Add an event to the public interface of a sprite (engine/sprite-interface.js).
+     * @param {string} targetId
+     * @param {string} name
+     * @returns {boolean} true if it was added
+     */
+    addInterfaceEvent (targetId, name) {
+        return this.runtime.spriteInterfaces.addEvent(this.runtime.getTargetById(targetId), name);
+    }
+
+    /**
+     * @param {string} targetId
+     * @param {string} oldName
+     * @param {string} newName
+     * @returns {boolean} true if it was renamed (with the blocks that send and receive it)
+     */
+    renameInterfaceEvent (targetId, oldName, newName) {
+        const renamed = this.runtime.spriteInterfaces.renameEvent(this.runtime.getTargetById(targetId), oldName,
+            newName);
+        if (renamed) this.emitWorkspaceUpdate();
+        return renamed;
+    }
+
+    /**
+     * @param {string} targetId
+     * @param {string} name
+     * @returns {boolean} true if it was removed
+     */
+    removeInterfaceEvent (targetId, name) {
+        return this.runtime.spriteInterfaces.removeEvent(this.runtime.getTargetById(targetId), name);
+    }
+
+    /**
+     * Make a custom block of a sprite public (other sprites see it in the category of the sprite) or not.
+     * @param {string} targetId
+     * @param {string} prototypeId id of its prototype block
+     * @param {boolean} isPublic
+     */
+    setProcedurePublic (targetId, prototypeId, isPublic) {
+        this.runtime.spriteInterfaces.setPublic(this.runtime.getTargetById(targetId), prototypeId, isPublic);
     }
 
     /**
@@ -1774,6 +1955,30 @@ class VirtualMachine extends EventEmitter {
             const sprite = target.sprite;
             if (!sprite) {
                 throw new Error('No sprite associated with this target.');
+            }
+            if (target.componentOwner) {
+                // A member of a component: it goes out of the component, in every instance
+                const owner = target.componentOwner;
+                this.runtime.components.removeMember(target);
+                if (this.editingTarget === target || !this.runtime.targets.includes(this.editingTarget)) {
+                    this.setEditingTarget(owner.id);
+                }
+                this.emitTargetsUpdate();
+                return null;
+            }
+            if (sprite.component) {
+                // An instance of a component: only this one goes; the definition stays
+                const components = this.runtime.components;
+                const name = target.getName();
+                target.deleteMonitors();
+                components.removeInstance(target);
+                if (this.editingTarget === target) {
+                    const nextTargetIndex = Math.min(this.runtime.targets.length - 1, targetIndexBeforeDelete);
+                    this.setEditingTarget(this.runtime.targets[nextTargetIndex].id);
+                }
+                this.emitTargetsUpdate();
+                return () => Promise.resolve(components.addInstance(sprite, {name, like: target}))
+                    .then(() => this.emitTargetsUpdate());
             }
             const spritePromise = this.exportSprite(targetId, 'uint8array');
             const restoreSprite = () => spritePromise.then(spriteBuffer => this.addSprite(spriteBuffer));
@@ -1818,11 +2023,182 @@ class VirtualMachine extends EventEmitter {
         } else if (!target.sprite) {
             throw new Error('No sprite associated with this target.');
         }
+        if (target.sprite.component) {
+            // Another instance of the component
+            const instance = this.runtime.components.addInstance(target.sprite, {like: target});
+            this.setEditingTarget(instance.id);
+            return Promise.resolve();
+        }
         return target.duplicate().then(newTarget => {
             this.runtime.addTarget(newTarget);
             newTarget.goBehindOther(target);
             this.setEditingTarget(newTarget.id);
         });
+    }
+
+    // Components (engine/components.js, ROADMAP.md 階段 10)
+
+    /**
+     * Turn a 2D sprite into a component, with the sprite as its first instance.
+     * @param {string} targetId
+     * @returns {boolean} true if it became one
+     */
+    makeComponent (targetId) {
+        const made = !!this.runtime.components.makeComponent(this.runtime.getTargetById(targetId));
+        if (made) this.emitTargetsUpdate();
+        return made;
+    }
+
+    /**
+     * Place another instance of the component of an instance.
+     * @param {string} targetId an instance
+     * @returns {?string} id of the new instance
+     */
+    addComponentInstance (targetId) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target || !target.sprite.component) return null;
+        const instance = this.runtime.components.addInstance(target.sprite, {like: target});
+        this.setEditingTarget(instance.id);
+        return instance.id;
+    }
+
+    /**
+     * Turn an instance back into a sprite of its own, with a copy of the blocks, costumes and sounds.
+     * @param {string} targetId an instance
+     * @returns {Promise} resolves when the new sprite is there
+     */
+    unpackComponent (targetId) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target || !target.sprite.component) return Promise.resolve();
+        return this.exportSprite(targetId, 'uint8array').then(data => {
+            const layer = target.getLayerOrder ? target.getLayerOrder() : null;
+            this.runtime.components.removeInstance(target);
+            return this.addSprite(data).then(() => {
+                const sprite = this.editingTarget;
+                if (sprite && layer !== null && sprite.setLayerOrder) sprite.setLayerOrder(layer);
+                this.emitTargetsUpdate();
+            });
+        });
+    }
+
+    /**
+     * @param {string} targetId an instance
+     * @returns {{instances: number, blocks: number}} what deleting its component would take with it: its instances,
+     * and blocks elsewhere that use it (they stay, and do nothing)
+     */
+    getComponentUsage (targetId) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target || !target.sprite.component) return {instances: 0, blocks: 0};
+        const components = this.runtime.components;
+        const sprite = target.sprite;
+        const names = new Set(components.instancesOf(sprite).map(t => t.getName())
+            .concat(`_any_${sprite.name}`));
+        let blocks = 0;
+        for (const [owner, block] of components.allBlocks()) {
+            if (owner.sprite === sprite) continue;
+            const values = [block.fields.SPRITE, block.fields.COMPONENT].filter(Boolean).map(f => f.value);
+            const instance = components.instanceFieldOf(owner, block);
+            if (instance !== null) values.push(instance);
+            if (block.mutation && block.mutation.sprite) values.push(block.mutation.sprite);
+            if (values.some(value => names.has(value) || value === sprite.name)) blocks++;
+        }
+        return {instances: components.instancesOf(sprite).length, blocks};
+    }
+
+    /**
+     * Delete the component of an instance, with all its instances.
+     * @param {string} targetId an instance
+     */
+    deleteComponent (targetId) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target || !target.sprite.component) return;
+        const editing = this.editingTarget;
+        this.runtime.components.removeDefinition(target.sprite);
+        if (editing && !this.runtime.targets.includes(editing)) {
+            this.setEditingTarget(this.runtime.targets[this.runtime.targets.length - 1].id);
+        }
+        this.emitTargetsUpdate();
+    }
+
+    /**
+     * @param {string} targetId an instance
+     * @param {string} name new name of its component
+     */
+    renameComponent (targetId, name) {
+        const target = this.runtime.getTargetById(targetId);
+        if (target && this.runtime.components.renameDefinition(target.sprite, name)) {
+            this.emitTargetsUpdate();
+            this.emitWorkspaceUpdate();
+        }
+    }
+
+    /**
+     * @param {string} targetId an instance
+     * @param {string} name a property
+     * @param {*} value its value for this instance; undefined for the default
+     */
+    setComponentProp (targetId, name, value) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target) return;
+        const components = this.runtime.components;
+        if (typeof value === 'undefined') components.resetProp(target, name);
+        else components.setProp(target, name, value);
+        // An instance inside a component: the value belongs to the component, for every instance of it
+        const spec = target.sprite.component ? components.specOf(target) : null;
+        if (spec) {
+            spec.props = Object.assign({}, target.componentProps);
+            const owner = target.componentOwner;
+            for (const instance of owner.sprite.clones) {
+                const other = instance.componentMembers && instance.componentMembers.get(spec.key);
+                if (other && other !== target) other.componentProps = Object.assign({}, spec.props);
+            }
+        }
+        this.emitTargetsUpdate();
+    }
+
+    /**
+     * Add, change, rename or remove a property of the component of an instance.
+     * @param {string} targetId an instance
+     * @param {string} action 'add', 'update', 'rename' or 'remove'
+     * @param {string|object} name the property (for 'add': {name, type, default, options})
+     * @param {*} [value] for 'update': {type, default, options}; for 'rename': the new name
+     * @returns {boolean} false if it couldn't be done (e.g. the name is taken)
+     */
+    editComponentProp (targetId, action, name, value) {
+        const target = this.runtime.getTargetById(targetId);
+        if (!target || !target.sprite.component) return false;
+        const components = this.runtime.components;
+        let done = true;
+        if (action === 'add') done = components.addProp(target.sprite, name);
+        else if (action === 'update') components.updateProp(target.sprite, name, value);
+        else if (action === 'rename') done = components.renameProp(target.sprite, name, value);
+        else if (action === 'remove') components.removeProp(target.sprite, name);
+        if (done) this.emitTargetsUpdate();
+        return done;
+    }
+
+    /**
+     * Make, change or remove an output of the component a target is in (engine/components.js).
+     * @param {string} targetId an instance, or a sprite in one
+     * @param {string} action 'define' (make one, or change the one with `id`) or 'remove'
+     * @param {object} spec for 'define': {proccode, argumentIds, argumentNames, id}; for 'remove': {id}
+     * @returns {?object} the output ('define'), true if it was removed, or null/false if it couldn't be done
+     */
+    editComponentOutput (targetId, action, spec) {
+        const components = this.runtime.components;
+        const sprite = components.definitionOfTarget(this.runtime.getTargetById(targetId));
+        if (!sprite) return null;
+        let result = null;
+        if (action === 'define') result = components.defineOutput(sprite, spec, spec && spec.id);
+        else if (action === 'remove') result = components.removeOutput(sprite, spec && spec.id);
+        else if (action === 'forward') {
+            result = components.forwardOutput(sprite, spec && spec.instance, spec && spec.port);
+        }
+        if (result) {
+            this.emitWorkspaceUpdate();
+            this.emitTargetsUpdate();
+        }
+        return result;
     }
 
     /**
@@ -2111,6 +2487,7 @@ class VirtualMachine extends EventEmitter {
      * of the current editing target's blocks.
      */
     emitWorkspaceUpdate () {
+        if (this.editingTarget) this.runtime.components.completeOutputBlocks(this.editingTarget);
         // Create a list of broadcast message Ids according to the stage variables
         const stageVariables = this.runtime.getTargetForStage().variables;
         let messageIds = [];
@@ -2174,9 +2551,323 @@ class VirtualMachine extends EventEmitter {
             Object.prototype.hasOwnProperty.call(target, 'id') &&
             Object.prototype.hasOwnProperty.call(target, 'isStage') &&
             !target.isStage) {
-            return target.id;
+            // While a component is being edited, only it can be picked on the stage
+            const scope = this.runtime.components.editScope;
+            if (scope && !this.componentScopeTargets().includes(target)) return null;
+            // A member of a component is picked as the instance it is in, at the level being edited (like a group:
+            // double-click to go in)
+            return this.componentLevelOf(target).id;
         }
         return null;
+    }
+
+    /**
+     * @param {Target} target
+     * @returns {Target} the target itself, or the instance of a component it is in at the level being edited: the
+     * top level, or directly in the component being edited
+     */
+    componentLevelOf (target) {
+        const scope = this.runtime.components.editScope || null;
+        let level = target;
+        while (level !== scope && level.componentOwner && level.componentOwner !== scope) level = level.componentOwner;
+        return level;
+    }
+
+    /**
+     * Double-clicking a target on the stage: an instance of a component is entered, with the member that was
+     * clicked (or the instance in it that contains it) selected; anything else is selected.
+     * @param {int} drawableId the drawable that was double-clicked
+     */
+    enterComponentAtDrawable (drawableId) {
+        const target = this.runtime.getTargetByDrawableId(drawableId);
+        if (!target || target.isStage) return;
+        const levelId = this.getTargetIdForDrawableId(drawableId);
+        const level = levelId && this.runtime.getTargetById(levelId);
+        if (!level) return;
+        if (!level.sprite.component) {
+            this.setEditingTarget(level.id);
+            return;
+        }
+        this.enterComponent(level.id);
+        if (level === target) return;
+        let inside = target;
+        while (inside.componentOwner && inside.componentOwner !== level) inside = inside.componentOwner;
+        this.setEditingTarget(inside.id);
+    }
+
+    /**
+     * @returns {Array<Target>} the instance whose component is being edited, and the members in it (and in them)
+     */
+    componentScopeTargets () {
+        const components = this.runtime.components;
+        const scope = components.editScope;
+        if (!scope) return [];
+        const result = [];
+        const add = target => {
+            result.push(target);
+            for (const member of components.membersOf(target)) add(member);
+        };
+        add(scope);
+        return result;
+    }
+
+    /**
+     * Enter or leave editing a component (the component mode of the editor): what is outside it is hidden
+     * ('isolate') or faded ('surround') on the stage and can't be picked, and sprites added meanwhile go into it.
+     * @param {?string} instanceId the instance to edit, or null to stop
+     * @param {string} [view] 'isolate' (default) or 'surround'
+     */
+    setComponentEditScope (instanceId, view = 'isolate') {
+        const components = this.runtime.components;
+        const scope = instanceId ? this.runtime.getTargetById(instanceId) : null;
+        components.editScope = scope && scope.sprite.component ? scope : null;
+        this._componentView = view;
+        this.refreshComponentEditView();
+        this.emitTargetsUpdate(false);
+    }
+
+    /**
+     * Open the page of a component: the component on its own, with an instance of it that is not saved, while the
+     * project does not run (see Components.openPage). Opened while one is open, it is on top of it (going in).
+     * @param {string} targetId an instance of the component, one in the page (a component inside it), or the
+     * component (a member of it)
+     * @returns {?string} the id of the instance of the page
+     */
+    openComponentPage (targetId) {
+        const components = this.runtime.components;
+        const target = this.runtime.getTargetById(targetId);
+        const sprite = target && (target.sprite.component ? target.sprite : components.definitionOfTarget(target));
+        if (!sprite) return null;
+        const preview = components.openPage(sprite);
+        if (!preview) return null;
+        this.refreshComponentEditView();
+        this.setEditingTarget(preview.id);
+        this.emitTargetsUpdate(false);
+        this.emit('componentPageChanged');
+        return preview.id;
+    }
+
+    /**
+     * Go back from the page of a component: to the one it was opened from, or the project.
+     * @param {boolean} [all] true to go all the way back to the project
+     */
+    closeComponentPage (all) {
+        const components = this.runtime.components;
+        if (!components.page) return;
+        const closed = components.page.stack[components.page.stack.length - 1];
+        let preview = components.closePage();
+        if (all) {
+            while (preview) preview = components.closePage();
+        }
+        this.refreshComponentEditView();
+        const back = preview || components.instancesOf(closed)[0] ||
+            this.runtime.targets.find(target => target.isOriginal && !target.isStage && !target.isPreview);
+        this.setEditingTarget((back || this.runtime.getTargetForStage()).id);
+        this.emitTargetsUpdate(false);
+        this.emit('componentPageChanged');
+    }
+
+    /**
+     * Start the component of the page again, with new variables.
+     */
+    resetComponentPage () {
+        const components = this.runtime.components;
+        if (!components.page) return;
+        const preview = components.restartPage();
+        this.refreshComponentEditView();
+        if (preview) this.setEditingTarget(preview.id);
+        this.emitTargetsUpdate(false);
+    }
+
+    /**
+     * @returns {?{path: Array<string>, instanceId: string}} the component pages that are open, from the outside in
+     * (names of the components), and the instance of the innermost
+     */
+    getComponentPage () {
+        const page = this.runtime.components.page;
+        if (!page) return null;
+        return {path: page.stack.map(sprite => sprite.name), instanceId: page.preview.id};
+    }
+
+    /**
+     * @param {string} targetId an instance, or a sprite in one
+     * @returns {?{inputs: Array<object>, outputs: Array<object>}} what the outside can do with the component (its
+     * public custom blocks, {id, proccode, argumentIds, argumentNames, returns}) and what it says
+     * ({id, proccode, params: [{id, name, type}]})
+     */
+    getComponentInterface (targetId) {
+        const components = this.runtime.components;
+        const holder = components.holderOf(this.runtime.getTargetById(targetId));
+        if (!holder) return null;
+        const {publicProcedures} = require('./engine/sprite-interface');
+        return {
+            inputs: publicProcedures(holder),
+            outputs: JSON.parse(JSON.stringify(holder.sprite.component.outputs))
+        };
+    }
+
+    /**
+     * Run an input of the instance of the page (the buttons of the test panel).
+     * @param {string} prototypeId the prototype block of the public custom block
+     * @param {object} values by id of the arguments
+     * @returns {Promise<*>} resolves when it is done, with what it reports if it is a reporter
+     */
+    runComponentInput (prototypeId, values) {
+        return this.runtime.components.callInput(prototypeId, values);
+    }
+
+    /**
+     * Edit the component of an instance (an older name of openComponentPage).
+     * @param {string} instanceId an instance
+     */
+    enterComponent (instanceId) {
+        this.openComponentPage(instanceId);
+    }
+
+    /**
+     * Stop editing the component, one level up (or all the way out).
+     * @param {boolean} [all] true to go back to the whole project
+     */
+    exitComponent (all) {
+        this.closeComponentPage(all);
+    }
+
+    /**
+     * Put an instance of a component into the component being edited.
+     * @param {string} componentId the component to put in
+     * @returns {?string} id of the new instance, or null if it can't go in (e.g. it contains the edited one)
+     */
+    addComponentToEdited (componentId) {
+        const components = this.runtime.components;
+        const scope = components.editScope;
+        const member = components.addComponentMember(scope, components.definitions.get(componentId));
+        if (!member) return null;
+        this.refreshComponentEditView();
+        this.setEditingTarget(member.id);
+        this.emitTargetsUpdate();
+        return member.id;
+    }
+
+    /**
+     * @param {string} view how the stage shows what is outside the component being edited: 'isolate' or 'surround'
+     */
+    setComponentView (view) {
+        this._componentView = view === 'surround' ? 'surround' : 'isolate';
+        this.refreshComponentEditView();
+        this.emitTargetsUpdate(false);
+    }
+
+    /**
+     * @returns {string} see setComponentView
+     */
+    getComponentView () {
+        return this._componentView || 'isolate';
+    }
+
+    /**
+     * Show the stage for the component being edited (see setComponentEditScope), or as it is.
+     */
+    refreshComponentEditView () {
+        const renderer = this.runtime.renderer;
+        const scope = this.runtime.components.editScope;
+        const scene3D = this.runtime.scene3D;
+        if (!renderer) return;
+        const inside = new Set(this.componentScopeTargets());
+        for (const target of this.runtime.targets) {
+            if (target.isStage || typeof target.drawableID !== 'number') continue;
+            target.updateAllDrawableProperties();
+            if (!scope || inside.has(target)) continue;
+            if (this._componentView === 'surround') {
+                renderer.updateDrawableEffect(target.drawableID, 'ghost', 75);
+            } else {
+                renderer.updateDrawableVisible(target.drawableID, false);
+            }
+        }
+        const stage = this.runtime.getTargetForStage();
+        const isolated = !!scope && this._componentView !== 'surround';
+        if (stage && typeof stage.drawableID === 'number') {
+            if (isolated) renderer.updateDrawableVisible(stage.drawableID, false);
+            else stage.updateAllDrawableProperties();
+        }
+        // A neutral background while only the component is shown
+        if (renderer.setBackgroundColor) {
+            if (isolated) renderer.setBackgroundColor(0.91, 0.93, 0.96);
+            else renderer.setBackgroundColor(1, 1, 1);
+        }
+        if (scene3D) {
+            if (scope && this._componentView !== 'surround') {
+                if (typeof this._layer3DVisible !== 'boolean') this._layer3DVisible = scene3D._layerVisible;
+                scene3D.setLayerVisible(false);
+            } else if (typeof this._layer3DVisible === 'boolean') {
+                scene3D.setLayerVisible(this._layer3DVisible);
+                this._layer3DVisible = null;
+            }
+        }
+        this.runtime.requestRedraw();
+    }
+
+    /**
+     * Turn sprites into a component. One sprite: it is the component. More: a new, empty sprite in the middle of
+     * them is the component, and they go into it.
+     * @param {Array<string>} targetIds 2D sprites
+     * @returns {Promise<?string>} the id of the instance of the new component
+     */
+    makeComponentFrom (targetIds) {
+        const targets = targetIds.map(id => this.runtime.getTargetById(id))
+            .filter(target => target && !target.isStage && !target.componentOwner && !target.is3D &&
+                !target.isCamera && !target.isCanvas);
+        if (targets.length === 0) return Promise.resolve(null);
+        if (targets.length === 1) {
+            return Promise.resolve(this.makeComponent(targets[0].id) ? targets[0].id : null);
+        }
+        const x = targets.reduce((sum, t) => sum + t.x, 0) / targets.length;
+        const y = targets.reduce((sum, t) => sum + t.y, 0) / targets.length;
+        const storage = this.runtime.storage;
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2" viewBox="0 0 2 2"></svg>';
+        const data = new TextEncoder().encode(svg);
+        const asset = storage.createAsset(storage.AssetType.ImageVector, storage.DataFormat.SVG, data, null, true);
+        if (storage.builtinHelper) {
+            storage.builtinHelper._store(storage.AssetType.ImageVector, storage.DataFormat.SVG, data, asset.assetId);
+        }
+        const names = this.runtime.targets.filter(t => t.isOriginal && !t.isStage).map(t => t.getName());
+        const name = StringUtil.unusedName('元件', names);
+        return this.addSprite({
+            isStage: false,
+            name,
+            variables: {},
+            lists: {},
+            broadcasts: {},
+            blocks: {},
+            comments: {},
+            currentCostume: 0,
+            sounds: [],
+            volume: 100,
+            visible: true,
+            x,
+            y,
+            size: 100,
+            direction: 90,
+            draggable: false,
+            rotationStyle: 'all around',
+            costumes: [{
+                name: '空白',
+                bitmapResolution: 1,
+                dataFormat: 'svg',
+                assetId: asset.assetId,
+                md5ext: `${asset.assetId}.svg`,
+                rotationCenterX: 1,
+                rotationCenterY: 1
+            }]
+        }).then(() => {
+            const root = this.runtime.targets.find(t => t.isOriginal && t.getName() === name);
+            if (!root) return null;
+            root.setXY(x, y);
+            this.makeComponent(root.id);
+            for (const target of targets) this.runtime.components.adoptMember(root, target);
+            this.setEditingTarget(root.id);
+            this.emitTargetsUpdate();
+            return root.id;
+        });
     }
 
     /**
@@ -2245,6 +2936,7 @@ class VirtualMachine extends EventEmitter {
         const target = this.runtime.getTargetById(targetId);
         if (target) {
             this._dragTarget = target;
+            this._dragStart = StageUndo.snapshot(target);
             target.startDrag();
         }
     }
@@ -2258,6 +2950,8 @@ class VirtualMachine extends EventEmitter {
         if (target) {
             this._dragTarget = null;
             target.stopDrag();
+            if (this._dragStart) this.runtime.stageUndo.record(target, this._dragStart);
+            this._dragStart = null;
             this.setEditingTarget(target.sprite && target.sprite.clones[0] ?
                 target.sprite.clones[0].id : target.id);
         }
@@ -2271,7 +2965,12 @@ class VirtualMachine extends EventEmitter {
         if (this._dragTarget) {
             this._dragTarget.postSpriteInfo(data);
         } else {
+            const before = StageUndo.snapshot(this.editingTarget);
             this.editingTarget.postSpriteInfo(data);
+            // Turning a dial or typing into a field changes the same thing many times in a row: that's one edit
+            this.runtime.stageUndo.record(this.editingTarget, before, true);
+            // A member of a component being edited: the component changes
+            if (this.editingTarget.componentOwner) this.runtime.components.memberChanged(this.editingTarget);
         }
         // Post sprite info means the gui has changed something about a sprite,
         // either through the sprite info pane fields (e.g. direction, size) or

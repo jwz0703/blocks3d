@@ -16,7 +16,8 @@ const setupInitialState = runtime => {
             renderer.updateDrawableEffect(drawableID, 'ghost', target.effects.ghost);
         }
 
-        if (target.visible && !target.isStage) {
+        // Components are placed as a whole (their members are placed from them), which interpolation doesn't do
+        if (target.visible && !target.isStage && !target.componentOwner && !target.componentMembers) {
             target.interpolationData = {
                 x: target.x,
                 y: target.y,

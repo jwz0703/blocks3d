@@ -27,11 +27,18 @@ const round = value => Math.round((Number(value) || 0) * 100) / 100;
 
 const ROTATION_FIELDS = ['rotationX', 'rotationY', 'rotationZ'];
 
+// What the mouse does at the sprite (RenderedTarget.mouseMode in the VM)
+const MOUSE_MODE_TITLES = {
+    auto: '滑鼠：自動判斷。有點擊或滑鼠積木、或看得見且參與碰撞的角色會擋住滑鼠；其他（例如不參與碰撞的裝飾）讓滑鼠穿過',
+    pass: '滑鼠：穿過。點擊和滑鼠會穿過這個角色，找到後面的角色；它自己的點擊和滑鼠積木不會觸發',
+    block: '滑鼠：停在。這個角色可以被點擊，也會擋住後面的角色'
+};
+
 const FIELDS = ['x', 'y', 'z', 'rotationX', 'rotationY', 'rotationZ', 'scaleX', 'scaleY', 'scaleZ', 'fov'];
 
 /**
- * The sprite info panel of 3D sprites: name, position, rotation, scale and visibility. Camera sprites have a field
- * of view instead of scale and visibility, and can be made the current camera.
+ * The sprite info panel of 3D sprites: name, position, rotation, scale, visibility and what the mouse does at it.
+ * Camera sprites have a field of view instead of scale, visibility and the mouse, and can be made the current camera.
  */
 class SpriteInfo3D extends React.Component {
     constructor (props) {
@@ -53,6 +60,7 @@ class SpriteInfo3D extends React.Component {
         this.handleToggleLock = this.handleToggleLock.bind(this);
         this.handleClickVisible = this.handleClickVisible.bind(this);
         this.handleClickNotVisible = this.handleClickNotVisible.bind(this);
+        this.handleChangeMouseMode = this.handleChangeMouseMode.bind(this);
         this.handleMakeActive = this.handleMakeActive.bind(this);
         this.handleSubmitField = {};
         for (const field of FIELDS) {
@@ -65,6 +73,7 @@ class SpriteInfo3D extends React.Component {
             this.props.disabled !== nextProps.disabled ||
             this.props.name !== nextProps.name ||
             this.props.visible !== nextProps.visible ||
+            this.props.mouseMode !== nextProps.mouseMode ||
             this.props.isCamera !== nextProps.isCamera ||
             this.props.active !== nextProps.active
         ) return true;
@@ -111,6 +120,9 @@ class SpriteInfo3D extends React.Component {
     handleClickNotVisible (e) {
         e.preventDefault();
         this.props.onChange({visible: false});
+    }
+    handleChangeMouseMode (e) {
+        this.props.onChange({mouseMode: e.target.value});
     }
     renderVector (label, fields, extra) {
         return (
@@ -217,6 +229,7 @@ class SpriteInfo3D extends React.Component {
     }
     render () {
         const {disabled} = this.props;
+        const mouseMode = this.props.mouseMode || 'auto';
         const lock = (
             <button
                 className={classNames(styles.lock, {[styles.lockActive]: this.state.scaleLocked})}
@@ -283,6 +296,17 @@ class SpriteInfo3D extends React.Component {
                         ]}
                         disabled={disabled}
                     />
+                    <select
+                        className={styles.mouseMode}
+                        disabled={disabled}
+                        title={MOUSE_MODE_TITLES[mouseMode]}
+                        value={mouseMode}
+                        onChange={this.handleChangeMouseMode}
+                    >
+                        <option value="auto">{'滑鼠：自動'}</option>
+                        <option value="pass">{'滑鼠：穿過'}</option>
+                        <option value="block">{'滑鼠：停在'}</option>
+                    </select>
                 </div>
                 {this.renderVector('位置', ['x', 'y', 'z'])}
                 {this.renderRotation()}
@@ -297,6 +321,7 @@ SpriteInfo3D.propTypes = {
     disabled: PropTypes.bool,
     fov: PropTypes.number, // eslint-disable-line react/no-unused-prop-types
     isCamera: PropTypes.bool,
+    mouseMode: PropTypes.oneOf(['auto', 'pass', 'block']),
     name: PropTypes.string,
     onChange: PropTypes.func.isRequired,
     onChangeName: PropTypes.func.isRequired,

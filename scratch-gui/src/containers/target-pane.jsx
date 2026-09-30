@@ -58,6 +58,7 @@ class TargetPane extends React.Component {
             'handlePaintSpriteClick',
             'handleFileUploadClick',
             'handleSpriteUpload',
+            'handleComponentFile',
             'setFileInput'
         ]);
         this.state = {
@@ -229,7 +230,11 @@ class TargetPane extends React.Component {
         this.props.onShowImporting();
         handleFileUpload(e.target, (buffer, fileType, fileName, fileIndex, fileCount) => {
             spriteUpload(buffer, fileType, fileName, vm, newSprite => {
-                this.handleNewSprite(newSprite)
+                // A component (.3dsc) is added as a component, after telling what is in it
+                vm.isComponentFile(newSprite).then(isComponent => {
+                    if (isComponent) return this.handleComponentFile(newSprite);
+                    return this.handleNewSprite(newSprite);
+                })
                     .then(() => {
                         if (fileIndex === fileCount - 1) {
                             this.props.onCloseImporting();
@@ -238,6 +243,20 @@ class TargetPane extends React.Component {
                     .catch(this.props.onCloseImporting);
             }, this.props.onCloseImporting);
         }, this.props.onCloseImporting);
+    }
+    /**
+     * @param {Uint8Array} bytes a .3dsc file
+     * @returns {Promise} resolves when it is added (or not, if the user says no)
+     */
+    async handleComponentFile (bytes) {
+        const vm = this.props.vm;
+        const info = await vm.describeComponentFile(bytes);
+        const list = (title, items) => (items.length ? `\n${title}：${items.join('、')}` : '');
+        // eslint-disable-next-line no-alert
+        const ok = window.confirm(`加入元件「${info.name}」？${list('屬性', info.props)}${list('輸入', info.inputs)}` +
+            `${list('輸出', info.outputs)}${list('裡面的元件', info.components)}${list('用到的擴充', info.extensions)}\n` +
+            '元件用自己的變數，不會讀專案的資料。');
+        if (ok) await vm.importComponent(bytes);
     }
     setFileInput (input) {
         this.fileInput = input;
@@ -256,8 +275,16 @@ class TargetPane extends React.Component {
     handleDrop (dragInfo) {
         const {sprite: targetId} = this.props.hoveredTarget;
         if (dragInfo.dragType === DragConstants.SPRITE) {
-            // Add one to both new and target index because we are not counting/moving the stage
-            this.props.vm.reorderTarget(dragInfo.index + 1, dragInfo.newIndex + 1);
+            // The list only shows some targets (members of components are inside their component), so the indexes
+            // of the list are turned into indexes of the runtime's targets
+            const {vm, sprites} = this.props;
+            const scope = vm.runtime.components.editScope;
+            const visible = Object.keys(sprites)
+                .filter(id => (sprites[id].componentOwnerId || null) === (scope ? scope.id : null));
+            const indexOf = id => vm.runtime.targets.findIndex(target => target.id === id);
+            const from = indexOf(visible[dragInfo.index]);
+            const to = indexOf(visible[dragInfo.newIndex]);
+            if (from >= 0 && to >= 0) this.props.vm.reorderTarget(from, to);
         } else if (dragInfo.dragType === DragConstants.BACKPACK_SPRITE) {
             // TODO storage does not have a way of loading zips right now, and may never need it.
             // So for now just grab the zip manually.

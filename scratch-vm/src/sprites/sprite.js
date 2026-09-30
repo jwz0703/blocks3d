@@ -164,6 +164,17 @@ class Sprite {
         copiedBlocks.forEach(block => {
             newSprite.blocks.createBlock(block);
         });
+        // The public interface (engine/sprite-interface.js), with the ids of the copied custom blocks
+        if (this.interface) {
+            const newIds = {};
+            originalBlocks.forEach((block, index) => {
+                newIds[block.id] = copiedBlocks[index].id;
+            });
+            newSprite.interface = {
+                events: this.interface.events.map(event => Object.assign({}, event)),
+                public: this.interface.public.map(id => newIds[id]).filter(Boolean)
+            };
+        }
 
 
         const allNames = this.runtime.targets.map(t => t.sprite.name);

@@ -2,6 +2,8 @@ import bindAll from 'lodash.bindall';
 import debounce from 'lodash.debounce';
 import defaultsDeep from 'lodash.defaultsdeep';
 import makeToolboxXML, {xmlEscape} from '../lib/make-toolbox-xml';
+import {defineComponentBlocks} from '../lib/tw-component-blocks';
+import PropertyPrompt from '../components/tw-property-prompt/property-prompt.jsx';
 import PropTypes from 'prop-types';
 import React from 'react';
 import {intlShape, injectIntl, defineMessages} from 'react-intl';
@@ -47,8 +49,17 @@ import {findTopBlock} from '../lib/backpack/code-payload.js';
 import {gentlyRequestPersistentStorage} from '../lib/tw-persistent-storage.js';
 import installFlyoutResizer from '../lib/tw-flyout-resizer.js';
 import updateBlockHints from '../lib/tw-block-hints.js';
+import {SKY_EXTENSIONS} from 'scratch-vm/src/engine/scene-3d-environment';
 
 // TW: Strings we add to scratch-blocks are localized here
+/**
+ * @param {RenderedTarget} stage the stage
+ * @returns {string[]} IDs of the block extensions of the kinds of sky that its backdrops have, sorted
+ */
+const getSkyExtensions = stage => Array.from(new Set(stage.getCostumes()
+    .map(costume => costume.environment && SKY_EXTENSIONS[costume.environment.sky.type])
+    .filter(Boolean))).sort();
+
 const messages = defineMessages({
     PROCEDURES_RETURN: {
         defaultMessage: 'return {v}',
@@ -110,9 +121,16 @@ class Blocks extends React.Component {
             'handleStatusButtonUpdate',
             'handleOpenSoundRecorder',
             'handlePromptStart',
+            'handleMenuAction',
+            'handleMakeProperty',
+            'handlePropertyPromptOk',
+            'handlePropertyPromptClose',
             'handlePromptCallback',
             'handlePromptClose',
             'handleCustomProceduresClose',
+            'handleExternalProcedureDef',
+            'handleEditOutput',
+            'handleForwardOutput',
             'onScriptGlowOn',
             'onScriptGlowOff',
             'onBlockGlowOn',
@@ -146,7 +164,9 @@ class Blocks extends React.Component {
         this.ScratchBlocks.recordSoundCallback = this.handleOpenSoundRecorder;
 
         this.ScratchBlocks.FieldColourSlider.activateEyedropper_ = this.props.onActivateColorPicker;
-        this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.props.onActivateCustomProcedures;
+        this.ScratchBlocks.Procedures.externalProcedureDefCallback = this.handleExternalProcedureDef;
+        this.ScratchBlocks.twEditOutput = this.handleEditOutput;
+        this.ScratchBlocks.twForwardOutput = this.handleForwardOutput;
         this.ScratchBlocks.ScratchMsgs.setLocale(this.props.locale);
 
         const Msg = this.ScratchBlocks.Msg;
@@ -217,6 +237,16 @@ class Blocks extends React.Component {
         };
         this.workspace.registerToolboxCategoryCallback(this.ScratchBlocks.PROCEDURE_CATEGORY_NAME,
             Procedures.flyoutCategory);
+        // Events and properties of sprites and components (ROADMAP.md 階段 10): made from 「建立一個屬性」 and from
+        // their menus (新事件… / 新屬性…, rename, delete), like messages and variables
+        toolboxWorkspace.registerButtonCallback('TWCOMP_MAKE_PROP', () => this.handleMakeProperty(null));
+        toolboxWorkspace.registerButtonCallback('TWCOMP_MAKE_OUTPUT', () => this.handleMakeOutput());
+        if (!this._menuActionsListening) {
+            this._menuActionsListening = true;
+            this.workspace.addChangeListener(this.handleMenuAction);
+            toolboxWorkspace.addChangeListener(this.handleMenuAction);
+        }
+        this.patchPublicProcedureMenu();
         toolboxWorkspace.registerButtonCallback('OPEN_RETURN_DOCS', () => {
             window.open('https://docs.turbowarp.org/return', '_blank');
         });
@@ -259,6 +289,7 @@ class Blocks extends React.Component {
     shouldComponentUpdate (nextProps, nextState) {
         return (
             this.state.prompt !== nextState.prompt ||
+            this.state.propertyPrompt !== nextState.propertyPrompt ||
             this.props.isVisible !== nextProps.isVisible ||
             this._renderedToolboxXML !== nextProps.toolboxXML ||
             this.props.extensionLibraryVisible !== nextProps.extensionLibraryVisible ||
@@ -440,7 +471,318 @@ class Blocks extends React.Component {
         });
     }
 
+    /**
+     * 新事件… / 新屬性… and renaming and deleting, picked in the menu of an event or a property: the menu goes back to
+     * what it was, and the action is done.
+     * @param {object} event a scratch-blocks event
+     */
+    handleMenuAction (event) {
+        const ScratchBlocks = this.ScratchBlocks;
+        if (event.type !== ScratchBlocks.Events.CHANGE || event.element !== 'field') return;
+        const action = event.newValue;
+        if (!['__new__', '__rename__', '__delete__'].includes(action)) return;
+        if (event.name !== 'EVENT' && event.name !== 'PROP') return;
+        const workspace = ScratchBlocks.Workspace.getById(event.workspaceId) || this.workspace;
+        const block = workspace.getBlockById(event.blockId);
+        if (!block) return;
+        const old = event.oldValue;
+        block.setFieldValue(old, event.name);
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        if (!target) return;
+        const ask = (title, label, defaultValue, callback) => this.handlePromptStart(label, defaultValue, name => {
+            if (name && name.trim()) callback(name.trim());
+        }, title, ScratchBlocks.BROADCAST_MESSAGE_VARIABLE_TYPE);
+        if (event.name === 'EVENT') {
+            if (action === '__new__') {
+                ask('新事件', '新事件的名稱：', '', name => {
+                    vm.addInterfaceEvent(target.id, name);
+                    block.setFieldValue(name, 'EVENT');
+                });
+            } else if (action === '__rename__') {
+                ask('重新命名事件', `把「${old}」重新命名為：`, old, name => vm.renameInterfaceEvent(target.id, old, name));
+            } else {
+                vm.removeInterfaceEvent(target.id, old);
+            }
+            return;
+        }
+        const holder = vm.runtime.components.holderOf(target);
+        if (!holder) return;
+        if (action === '__new__') {
+            this.handleMakeProperty(name => block.setFieldValue(name, 'PROP'));
+        } else if (action === '__rename__') {
+            ask('重新命名屬性', `把「${old}」重新命名為：`, old,
+                name => vm.editComponentProp(holder.id, 'rename', old, name));
+        } else {
+            vm.editComponentProp(holder.id, 'remove', old);
+        }
+    }
+    /**
+     * The modal of custom blocks opens for a new block or to edit one. In a component the block can be for something:
+     * inside the component (a function), an input (public: other sprites call it) or an output (see below).
+     * @param {Element} mutation the block as it is now
+     * @param {function(Element)} callback makes or changes the block
+     */
+    handleExternalProcedureDef (mutation, callback) {
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        // Only the root of a component has an interface; its sprites' blocks are their own
+        const isRoot = !!(target && target.sprite && target.sprite.component);
+        let purposes = null;
+        let purpose = '';
+        if (isRoot) {
+            const proccode = mutation.getAttribute('proccode');
+            const prototype = proccode ? this.findPrototype(target, proccode) : null;
+            purposes = [
+                {value: 'function', label: '內部函數', description: '只有元件裡的積木用得到'},
+                {value: 'input', label: '輸入', description: '外面的積木可以呼叫它（角色公開的自訂積木）'}
+            ];
+            // An output isn't a block of My Blocks, so an existing block can't become one
+            if (!prototype) {
+                purposes.push({value: 'output', label: '輸出', description: '元件對外面說話：外面用「當 [實體] 發出…」接收'});
+            }
+            purpose = prototype && vm.runtime.spriteInterfaces.isPublic(target, prototype.id) ? 'input' : 'function';
+        }
+        this.setState({
+            procedurePurposes: purposes,
+            procedurePurpose: purpose,
+            procedureCallback: callback,
+            outputModal: false
+        });
+        this.props.onActivateCustomProcedures(mutation, callback);
+    }
+    /**
+     * @param {Target} target the sprite
+     * @param {string} proccode the text of the custom block
+     * @returns {?object} the prototype block of the custom block with that text
+     */
+    findPrototype (target, proccode) {
+        return Object.values(target.blocks._blocks).find(block => block.opcode === 'procedures_prototype' &&
+            block.mutation && block.mutation.proccode === proccode) || null;
+    }
+    /**
+     * 「建立一個輸出」: like making a custom block, but the block goes in 元件 and the outside hears it.
+     */
+    handleMakeOutput () {
+        const mutation = document.createElement('mutation');
+        mutation.setAttribute('proccode', '輸出');
+        mutation.setAttribute('argumentids', '[]');
+        mutation.setAttribute('argumentnames', '[]');
+        mutation.setAttribute('argumentdefaults', '[]');
+        mutation.setAttribute('warp', 'false');
+        this.editOutput(mutation, null);
+    }
+    /**
+     * Right-clicking a block of an output: change its words and arguments (their ids stay).
+     * @param {string} id of the output
+     */
+    handleEditOutput (id) {
+        const {vm} = this.props;
+        const holder = vm.runtime.components.holderOf(vm.editingTarget);
+        const output = holder && holder.sprite.component.outputs.find(o => o.id === id);
+        if (!output) return;
+        const mutation = document.createElement('mutation');
+        mutation.setAttribute('proccode', output.proccode);
+        mutation.setAttribute('argumentids', JSON.stringify(output.params.map(p => p.id)));
+        mutation.setAttribute('argumentnames', JSON.stringify(output.params.map(p => p.name)));
+        mutation.setAttribute('argumentdefaults',
+            JSON.stringify(output.params.map(p => (p.type === 'b' ? 'false' : ''))));
+        mutation.setAttribute('warp', 'false');
+        this.editOutput(mutation, id);
+    }
+    /**
+     * Right-clicking "when [instance] says [output]": the component around says it too, as an output of its own.
+     * @param {string} instance the name of the instance inside
+     * @param {string} port the id of its output
+     */
+    handleForwardOutput (instance, port) {
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        if (!target) return;
+        vm.editComponentOutput(target.id, 'forward', {instance, port});
+    }
+    editOutput (mutation, id) {
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        if (!target) return;
+        // The outputs are made when the modal closes (below): the callback of a modal runs inside a reducer, which
+        // can't have the VM change the toolbox
+        const callback = () => {};
+        this.setState({
+            procedurePurposes: null,
+            procedurePurpose: '',
+            procedureCallback: callback,
+            outputModal: true,
+            outputId: id
+        });
+        this.props.onActivateCustomProcedures(mutation, callback);
+    }
+    defineOutput (mutation, id) {
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        if (!target || !mutation) return;
+        const parse = text => {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                return [];
+            }
+        };
+        const output = vm.editComponentOutput(target.id, 'define', {
+            id,
+            proccode: mutation.getAttribute('proccode'),
+            argumentIds: parse(mutation.getAttribute('argumentids')),
+            argumentNames: parse(mutation.getAttribute('argumentnames'))
+        });
+        if (!output) {
+            // eslint-disable-next-line no-alert
+            window.alert('已經有這個輸出了（文字一樣）');
+        }
+    }
+    /**
+     * @param {?function(string)} onMade called with the name of the new property
+     */
+    handleMakeProperty (onMade) {
+        this.setState({propertyPrompt: {onMade}});
+    }
+    handlePropertyPromptOk (prop) {
+        const {vm} = this.props;
+        const holder = vm.runtime.components.holderOf(vm.editingTarget);
+        const onMade = this.state.propertyPrompt && this.state.propertyPrompt.onMade;
+        this.setState({propertyPrompt: null});
+        if (!holder) return;
+        if (!vm.editComponentProp(holder.id, 'add', prop)) {
+            // eslint-disable-next-line no-alert
+            window.alert(`已經有叫「${prop.name}」的屬性了`);
+            return;
+        }
+        if (onMade) onMade(prop.name);
+    }
+    handlePropertyPromptClose () {
+        this.setState({propertyPrompt: null});
+    }
+    /**
+     * Right-clicking the definition of a custom block makes it public (other sprites can call it) or not.
+     */
+    patchPublicProcedureMenu () {
+        // The definition block gets its context menu from this mixin (a member of the block itself would clash)
+        const mixin = this.ScratchBlocks.ScratchBlocks.VerticalExtensions.PROCEDURE_DEF_CONTEXTMENU;
+        if (!mixin) return;
+        if (mixin.twPublicMenu) {
+            mixin.twPublicMenu.vm = this.props.vm;
+            return;
+        }
+        const original = mixin.customContextMenu;
+        // eslint-disable-next-line no-invalid-this
+        const menu = function (options) {
+            /* eslint-disable no-invalid-this */
+            if (original) original.call(this, options);
+            const vm = menu.vm;
+            const target = vm.editingTarget;
+            const input = this.getInput('custom_block');
+            const prototype = input && input.connection && input.connection.targetBlock();
+            if (!target || target.isStage || !prototype || this.workspace.isFlyout) return;
+            /* eslint-enable no-invalid-this */
+            const isPublic = vm.runtime.spriteInterfaces.isPublic(target, prototype.id);
+            options.push({
+                text: isPublic ? '不公開給其他角色' : '公開給其他角色',
+                enabled: true,
+                callback: () => vm.setProcedurePublic(target.id, prototype.id, !isPublic)
+            });
+        };
+        menu.vm = this.props.vm;
+        mixin.customContextMenu = menu;
+        mixin.twPublicMenu = menu;
+    }
+    /**
+     * @returns {object} the interfaces of sprites, for makeToolboxXML (see interfaceCategories there)
+     */
+    getInterfaces () {
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        const interfaces = vm.runtime.spriteInterfaces;
+        const {publicProcedures} = interfaces.constructor.helpers;
+        let own = null;
+        if (target && !target.isStage && target.sprite) {
+            const iface = target.sprite.interface;
+            own = {
+                // An instance, or a sprite in one: the properties and outputs of the component
+                props: vm.runtime.components.holderOf(target) ?
+                    vm.runtime.components.holderOf(target).sprite.component.props.map(prop => prop.name) : null,
+                outputs: vm.runtime.components.holderOf(target) ?
+                    vm.runtime.components.holderOf(target).sprite.component.outputs : [],
+                events: iface ? iface.events.map(event => event.name) : [],
+                publicNames: publicProcedures(target).map(procedure => procedure.proccode
+                    .replace(/(^|[^\\])%[snb]/g, '$1( )'))
+            };
+        }
+        const components = vm.runtime.components;
+        const others = interfaces.spritesWithInterface()
+            .filter(other => !other.sprite.component && (!target || other.sprite !== target.sprite))
+            .map(other => ({
+                name: other.getName(),
+                events: other.sprite.interface.events.map(event => event.name),
+                procedures: publicProcedures(other)
+            }))
+            .filter(other => other.events.length || other.procedures.length);
+        // One category for each component, even without instances; not inside the component itself. Inside a
+        // component, the instances are the ones in it.
+        const holder = components.holderOf(target);
+        for (const sprite of components.definitions.values()) {
+            // Not itself, nor the components it is in
+            if (holder && components.contains(sprite, holder.sprite)) continue;
+            const instances = holder ?
+                components.membersOf(holder).filter(member => member.sprite === sprite) :
+                components.instancesOf(sprite).filter(instance => !instance.componentOwner);
+            const first = instances[0] || sprite.componentTemplate;
+            others.push({
+                name: sprite.name,
+                events: sprite.interface ? sprite.interface.events.map(event => event.name) : [],
+                procedures: first ? publicProcedures(first) : [],
+                component: {
+                    instances: instances.map(instance => instance.getName()),
+                    props: sprite.component.props.map(prop => prop.name),
+                    outputs: sprite.component.outputs
+                }
+            });
+        }
+        return {own, others};
+    }
     onTargetsUpdate () {
+        // The interfaces of sprites (their events and public custom blocks) are categories of the palette
+        const components = this.props.vm.runtime.components;
+        const interfaceSignature = this.props.vm.runtime.spriteInterfaces.signature() +
+            JSON.stringify(Array.from(components.definitions.values()).map(sprite => [sprite.name,
+                sprite.component.props.map(prop => prop.name), sprite.component.outputs, sprite.interface,
+                components.instancesOf(sprite).map(instance => instance.getName())])) +
+            (this.props.vm.editingTarget ? this.props.vm.editingTarget.id : '');
+        if (interfaceSignature !== this._interfaceSignature && this.workspace) {
+            this._interfaceSignature = interfaceSignature;
+            const toolboxXML = this.getToolboxXML();
+            if (toolboxXML) this.props.updateToolboxState(toolboxXML);
+        }
+        // Setting the mouse to go through the sprite fades its mouse hats (top blocks)
+        const editing = this.props.vm.editingTarget;
+        const mouseMode = editing ? editing.mouseMode : null;
+        if (mouseMode !== this._mouseMode && this.workspace) {
+            this._mouseMode = mouseMode;
+            this.markUnsupportedBlocks(this.workspace.getTopBlocks());
+        }
+        // Sprites and instances coming and going: blocks that name them (ROADMAP.md 階段 10)
+        const names = this.props.vm.runtime.targets.filter(t => t.isOriginal).map(t => t.getName())
+            .join('\n');
+        if (names !== this._targetNames && this.workspace) {
+            this._targetNames = names;
+            this.markUnsupportedBlocks(this.workspace.getAllBlocks());
+        }
+        // Adding or deleting a backdrop, or changing its kind of sky, shows or hides the blocks of that kind of sky
+        const stage = this.props.vm.runtime.getTargetForStage();
+        const skyExtensions = stage ? getSkyExtensions(stage).join() : '';
+        if (skyExtensions !== this._skyExtensions) {
+            this._skyExtensions = skyExtensions;
+            const toolboxXML = this.getToolboxXML();
+            if (toolboxXML) this.props.updateToolboxState(toolboxXML);
+        }
         const target = this.props.vm.editingTarget;
         if (target && target.is3D && this.workspace.getFlyout()) {
             // 3D units are small, so keep 2 decimals
@@ -512,6 +854,8 @@ class Blocks extends React.Component {
                 {
                     is3D: !!target.is3D,
                     has3D: runtime.targets.some(t => t.is3D && !t.isCamera),
+                    skyExtensions: getSkyExtensions(stage),
+                    interfaces: this.getInterfaces(),
                     isInPalette: opcode => this.props.vm.isBlockInPalette(opcode, this.props.vm.getTargetKind(target))
                 }
             );
@@ -575,7 +919,22 @@ class Blocks extends React.Component {
         this.workspace.removeChangeListener(this.props.vm.blockListener);
         const dom = this.ScratchBlocks.Xml.textToDom(data.xml);
         try {
-            this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
+            try {
+                this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
+            } catch (error) {
+                // A block in an input of the wrong type (a reporter in a boolean input, from tools/3dsb-text or an
+                // older project) stops the loading halfway, leaving blocks that are never drawn and a workspace
+                // that scrolls strangely. The VM runs such blocks anyway, so they are loaded as they are.
+                const Connection = this.ScratchBlocks.Connection;
+                const checkType = Connection.prototype.checkType_;
+                Connection.prototype.checkType_ = () => true;
+                try {
+                    this.ScratchBlocks.Xml.clearWorkspaceAndLoadFromXml(dom, this.workspace);
+                } finally {
+                    Connection.prototype.checkType_ = checkType;
+                }
+                log.warn('Loaded blocks with inputs of the wrong type', error);
+            }
         } catch (error) {
             // The workspace is likely incomplete. What did update should be
             // functional.
@@ -618,11 +977,73 @@ class Blocks extends React.Component {
         for (const block of blocks) {
             const svg = block.getSvgRoot && block.getSvgRoot();
             if (!svg) continue;
-            const unsupported = vm.isBlockUnsupported(block.type, kind);
+            // Also mouse hats of a sprite that the mouse goes through: they never start
+            const unsupported = vm.isBlockUnsupported(block.type, kind) ||
+                vm.isMouseHatIgnored(block.type, vm.editingTarget);
             svg.classList.toggle(blocksStyles.unsupportedBlock, unsupported);
+            svg.classList.toggle(blocksStyles.missingReference, this.isMissingReference(block));
+        }
+    }
+    /**
+     * @param {object} block a scratch-blocks block
+     * @returns {boolean} true if it names a sprite or instance of a component that isn't there (ROADMAP.md 階段 10)
+     */
+    isMissingReference (block) {
+        const {runtime} = this.props.vm;
+        const editing = this.props.vm.editingTarget;
+        const exists = name => {
+            if (!name || name === '_myself_' || name === '_stage_') return true;
+            if (name.startsWith('_any_')) return !!runtime.components.definitionByName(name.slice(5));
+            // Inside a component, its members first
+            return !!runtime.components.resolveName(editing, name);
+        };
+        const field = (b, name) => {
+            try {
+                return b.getFieldValue(name);
+            } catch (e) {
+                return null;
+            }
+        };
+        switch (block.type) {
+        case 'twiface_whenEvent':
+            return !exists(field(block, 'SPRITE'));
+        case 'twcomp_setInstanceProp':
+            // The outside can't write what is inside a component any more: it calls an input
+            return true;
+        case 'twcomp_instanceProp': {
+            const menu = block.getInputTargetBlock('INSTANCE');
+            return !!menu && menu.isShadow() && !exists(field(menu, 'instances'));
+        }
+        case 'twcomp_whenOutput': {
+            // The instance, and the output it says
+            if (!exists(field(block, 'SPRITE'))) return true;
+            const sprite = runtime.components.definitionOf(field(block, 'SPRITE'), editing);
+            const port = field(block, 'PORT');
+            return !sprite || !sprite.component.outputs.some(output => output.id === port);
+        }
+        case 'twcomp_emit':
+        case 'twcomp_emitAndWait': {
+            const holder = runtime.components.holderOf(editing);
+            const port = field(block, 'PORT');
+            return !holder || !holder.sprite.component.outputs.some(output => output.id === port);
+        }
+        case 'twcomp_allInstances':
+        case 'twcomp_spawn': {
+            const name = field(block, 'COMPONENT');
+            return !!name && !runtime.components.definitionByName(name);
+        }
+        default:
+            if (/^procedures_callsprite/.test(block.type)) return !exists(block.sprite_);
+            return false;
         }
     }
     handleUnsupportedBlocks (event) {
+        if (event.type === this.ScratchBlocks.Events.CHANGE) {
+            // A menu picked another sprite or instance; the block may be the menu of the block that names it
+            const block = this.workspace.getBlockById(event.blockId);
+            if (block) this.markUnsupportedBlocks([block, block.getParent()].filter(Boolean));
+            return;
+        }
         if (event.type !== this.ScratchBlocks.Events.BLOCK_CREATE) return;
         const blocks = event.ids.map(id => this.workspace.getBlockById(id)).filter(Boolean);
         this.markUnsupportedBlocks(blocks);
@@ -684,6 +1105,8 @@ class Blocks extends React.Component {
                 .map(fieldTypeName => categoryInfo.customFieldTypes[fieldTypeName].scratchBlocksDefinition));
         defineBlocks(categoryInfo.menus);
         defineBlocks(categoryInfo.blocks);
+        // Outputs of components take their shapes from the component (lib/tw-component-blocks.js)
+        if (categoryInfo.id === 'twcomp') defineComponentBlocks(this.ScratchBlocks, this.props.vm);
 
         // Update the toolbox with new blocks if possible
         const toolboxXML = this.getToolboxXML();
@@ -746,11 +1169,41 @@ class Blocks extends React.Component {
     handlePromptClose () {
         this.setState({prompt: null});
     }
-    handleCustomProceduresClose (data) {
+    handleCustomProceduresClose (data, purpose) {
+        const {vm} = this.props;
+        const target = vm.editingTarget;
+        const pending = this.state.procedureCallback;
+        if (this.state.outputModal || (data && purpose === 'output' && target)) {
+            // Not a block of My Blocks: an output of the component
+            this.props.onRequestCloseCustomProcedures(null);
+            const id = this.state.outputModal ? this.state.outputId : null;
+            this.setState({procedurePurposes: null, procedureCallback: null, outputModal: false, outputId: null});
+            if (data) this.defineOutput(data, id);
+            return;
+        }
         this.props.onRequestCloseCustomProcedures(data);
-        const ws = this.workspace;
-        ws.refreshToolboxSelection_();
-        ws.toolbox_.scrollToCategoryById('myBlocks');
+        this.setState({procedurePurposes: null, procedureCallback: null});
+        if (data && purpose && target && pending) {
+            // An input is a public custom block; its prototype block is there a moment after the callback ran
+            const proccode = data.getAttribute('proccode');
+            const wantsPublic = purpose === 'input';
+            const apply = tries => {
+                const prototype = this.findPrototype(target, proccode);
+                if (prototype) {
+                    if (vm.runtime.spriteInterfaces.isPublic(target, prototype.id) !== wantsPublic) {
+                        vm.setProcedurePublic(target.id, prototype.id, wantsPublic);
+                    }
+                } else if (tries > 0) {
+                    setTimeout(() => apply(tries - 1), 40);
+                }
+            };
+            setTimeout(() => apply(10), 40);
+        }
+        if (this.workspace && this.workspace.toolbox_) {
+            const ws = this.workspace;
+            ws.refreshToolboxSelection_();
+            ws.toolbox_.scrollToCategoryById('myBlocks');
+        }
     }
     handleDrop (dragInfo) {
         fetch(dragInfo.payload.bodyUrl)
@@ -817,6 +1270,12 @@ class Blocks extends React.Component {
                     onDrop={this.handleDrop}
                     {...props}
                 />
+                {this.state.propertyPrompt ? (
+                    <PropertyPrompt
+                        onCancel={this.handlePropertyPromptClose}
+                        onOk={this.handlePropertyPromptOk}
+                    />
+                ) : null}
                 {this.state.prompt ? (
                     <Prompt
                         defaultValue={this.state.prompt.defaultValue}
@@ -845,6 +1304,10 @@ class Blocks extends React.Component {
                         options={{
                             media: options.media
                         }}
+                        hideWarp={!!this.state.outputModal}
+                        purpose={this.state.procedurePurpose}
+                        purposes={this.state.procedurePurposes}
+                        title={this.state.outputModal ? '建立一個輸出' : void 0}
                         onRequestClose={this.handleCustomProceduresClose}
                     />
                 ) : null}

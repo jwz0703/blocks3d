@@ -250,11 +250,21 @@ document.addEventListener('touchend', onMouseUp);
 canvas.addEventListener('mousedown', onMouseDown);
 canvas.addEventListener('touchstart', onMouseDown, {passive: false});
 canvas.addEventListener('wheel', e => {
+    // Pinching a trackpad is the wheel with ctrl held: it would zoom the page
+    if (e.ctrlKey) e.preventDefault();
     vm.postIOData('mouseWheel', {
         deltaX: e.deltaX,
-        deltaY: e.deltaY
+        deltaY: e.deltaY,
+        deltaMode: e.deltaMode,
+        ctrlKey: e.ctrlKey
     });
-});
+}, {passive: false});
+// The "set cursor" block
+const showCursor = cursor => {
+    canvas.style.cursor = cursor && cursor !== 'default' ? cursor : '';
+};
+vm.runtime.on('CURSOR_CHANGED', showCursor);
+showCursor(vm.runtime.cursor);
 canvas.addEventListener('contextmenu', e => {
     if (vm.runtime.ioDevices.mouse.usesRightClickDown) {
         e.preventDefault();

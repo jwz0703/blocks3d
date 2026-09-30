@@ -21,6 +21,15 @@ const getMonitorIdForBlockWithArgs = require('../util/get-monitor-id');
  * @param {boolean} optNoGlow Optional flag to indicate that blocks in this container
  * should not request glows. This does not affect glows when clicking on a block to execute it.
  */
+// Hats that the mouse starts on their own sprite (see Blocks.hasMouseScripts)
+const MOUSE_HATS = [
+    'event_whenthisspriteclicked',
+    'event_whenstageclicked',
+    'twmouse_whentapped',
+    'event3d_whenmouseenter',
+    'event3d_whenmouseleave'
+];
+
 class Blocks {
     constructor (runtime, optNoGlow) {
         this.runtime = runtime;
@@ -631,6 +640,28 @@ class Blocks {
         this._cache.proceduresPopulated = false;
         // A new object, so that threads notice that their bindings of the procedures are stale (engine/cross-call.js)
         this._cache.crossCall = {};
+        this._cache.mouseScripts = null;
+    }
+
+    /**
+     * @returns {boolean} true if a script starts with a hat that the mouse starts (MOUSE_HATS): clicks, taps and the
+     * mouse moving onto and off the sprite. Used by 3D sprites whose mouse mode is 'auto' (Target3D.blocksMouse).
+     */
+    hasMouseScripts () {
+        if (this._cache.mouseScripts === null || this._cache.mouseScripts === void 0) {
+            this._cache.mouseScripts = this._scripts.some(id => {
+                const block = this._blocks[id];
+                return !!block && Blocks.MOUSE_HATS.includes(block.opcode);
+            });
+        }
+        return this._cache.mouseScripts;
+    }
+
+    /**
+     * @returns {string[]} opcodes of the hats that the mouse starts on the sprite they are in
+     */
+    static get MOUSE_HATS () {
+        return MOUSE_HATS;
     }
 
     /**

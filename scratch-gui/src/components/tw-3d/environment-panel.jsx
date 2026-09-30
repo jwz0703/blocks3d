@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import React from 'react';
 
 import {sunFromAngles, sunToAngles} from 'scratch-vm/src/engine/scene-3d-environment';
+import {getSkyPack} from 'scratch-vm/src/engine/scene-3d-sky-packs';
 
 import Input from '../forms/input.jsx';
 import BufferedInputHOC from '../forms/buffered-input-hoc.jsx';
@@ -16,14 +17,6 @@ const SKY_FILE = /\.(hdr|exr|png|jpe?g|webp)$/i;
 
 // Big HDRIs are slow to load and to turn into lighting
 const LARGE_SKY_FILE = 8 * 1024 * 1024;
-
-const SKY_TYPES = [
-    {value: 'procedural', name: '程序天空'},
-    {value: 'gradient', name: '漸層'},
-    {value: 'color', name: '純色'},
-    {value: 'hdri', name: 'HDRI / 全景圖'},
-    {value: '2d', name: '2D 背景'}
-];
 
 const LIGHTING_TYPES = [
     {value: 'sky', name: '跟著天空'},
@@ -172,37 +165,46 @@ class EnvironmentPanel extends React.Component {
             </div>
         );
     }
+    /**
+     * The sky of the backdrop: its kind stays the one it was added as, so this only shows the parameters of its
+     * backdrop pack (scratch-vm/src/engine/scene-3d-sky-packs.js).
+     * @param {object} env the environment
+     * @returns {React.ReactElement} the fields
+     */
     renderSky (env) {
         const sky = env.sky;
+        const pack = getSkyPack(sky.type);
+        if (!pack) {
+            return <p className={styles.hint}>{'背景的圖畫在 3D 場景後面，可以在下面的繪圖編輯器修改。'}</p>;
+        }
         return (
             <React.Fragment>
-                {this.renderField('天空', this.renderSelect('skyType', sky.type, SKY_TYPES,
-                    e => ({sky: {type: e.target.value}})))}
-                {sky.type === 'color' ? this.renderField('顏色', this.renderColor('skyColor', sky.color,
-                    e => ({sky: {color: e.target.value}}))) : null}
-                {sky.type === 'gradient' ? (
-                    <React.Fragment>
-                        {this.renderField('上方', this.renderColor('skyTop', sky.top,
-                            e => ({sky: {top: e.target.value}})))}
-                        {this.renderField('下方', this.renderColor('skyBottom', sky.bottom,
-                            e => ({sky: {bottom: e.target.value}})))}
-                    </React.Fragment>
-                ) : null}
-                {sky.type === 'procedural' ? this.renderField('雲量', this.renderRange('clouds', sky.clouds,
-                    0, 100, 1, e => ({sky: {clouds: Number(e.target.value)}}), v => `${v}%`)) : null}
-                {sky.type === 'hdri' ? (
-                    <React.Fragment>
-                        {this.renderField('檔案', this.renderFileSelect('skyFile', sky.file, 'sky'))}
-                        {this.renderField('旋轉', this.renderRange('skyRotation', sky.rotation, -180, 180, 1,
-                            e => ({sky: {rotation: Number(e.target.value)}}), v => `${v}°`))}
-                    </React.Fragment>
-                ) : null}
-                {['procedural', 'gradient', 'hdri'].includes(sky.type) ? this.renderField('模糊',
-                    this.renderRange('skyBlur', sky.blur, 0, 100, 1, e => ({sky: {blur: Number(e.target.value)}}),
-                        v => `${v}%`)) : null}
-                {sky.type === '2d' ? (
-                    <p className={styles.hint}>{'背景的圖畫在 3D 場景後面，可以在下面的繪圖編輯器修改。'}</p>
-                ) : null}
+                <div className={styles.sectionTitle}>{pack.name}</div>
+                {pack.params.map(param => {
+                    const key = `sky-${param.key}`;
+                    if (param.kind === 'color') {
+                        return (
+                            <React.Fragment key={key}>
+                                {this.renderField(param.label, this.renderColor(key, sky[param.key],
+                                    e => ({sky: {[param.key]: e.target.value}})))}
+                            </React.Fragment>
+                        );
+                    }
+                    if (param.kind === 'file') {
+                        return (
+                            <React.Fragment key={key}>
+                                {this.renderField(param.label, this.renderFileSelect(key, sky[param.key], 'sky'))}
+                            </React.Fragment>
+                        );
+                    }
+                    return (
+                        <React.Fragment key={key}>
+                            {this.renderField(param.label, this.renderRange(key, sky[param.key], param.min,
+                                param.max, param.step, e => ({sky: {[param.key]: Number(e.target.value)}}),
+                                v => `${v}${param.unit || ''}`))}
+                        </React.Fragment>
+                    );
+                })}
             </React.Fragment>
         );
     }
@@ -330,7 +332,4 @@ EnvironmentPanel.propTypes = {
     onUploadSkyFile: PropTypes.func.isRequired
 };
 
-export {
-    EnvironmentPanel as default,
-    SKY_TYPES
-};
+export default EnvironmentPanel;

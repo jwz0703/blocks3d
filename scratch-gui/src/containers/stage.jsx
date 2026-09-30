@@ -42,6 +42,7 @@ class Stage extends React.Component {
             'onContextMenu',
             'updateRect',
             'questionListener',
+            'cursorListener',
             'setDragCanvas',
             'clearDragCanvas',
             'drawDragCanvas',
@@ -95,6 +96,8 @@ class Stage extends React.Component {
         this.updateViewportAspect();
         this.renderer.resize(this.rect.width, this.rect.height);
         this.props.vm.runtime.addListener('QUESTION', this.questionListener);
+        this.props.vm.runtime.addListener('CURSOR_CHANGED', this.cursorListener);
+        this.cursorListener(this.props.vm.runtime.cursor);
         // Editing 3D sprites on the stage, not in the player or fullscreen
         this.props.vm.runtime.scene3D.editor.setEnabled(this.props.useEditorDragStyle);
     }
@@ -128,9 +131,14 @@ class Stage extends React.Component {
         this.detachRectEvents();
         this.stopColorPickingLoop();
         this.props.vm.runtime.removeListener('QUESTION', this.questionListener);
+        this.props.vm.runtime.removeListener('CURSOR_CHANGED', this.cursorListener);
     }
     questionListener (question) {
         this.setState({question: question});
+    }
+    cursorListener (cursor) {
+        // The "set cursor" block (twmouse). The default leaves the stage's own cursor, e.g. for the color picker.
+        this.canvas.style.cursor = cursor && cursor !== 'default' ? cursor : '';
     }
     handleQuestionAnswered (answer) {
         this.setState({question: null}, () => {
@@ -156,7 +164,7 @@ class Stage extends React.Component {
         document.addEventListener('touchend', this.onMouseUp);
         canvas.addEventListener('mousedown', this.onMouseDown);
         canvas.addEventListener('touchstart', this.onMouseDown);
-        canvas.addEventListener('wheel', this.onWheel);
+        canvas.addEventListener('wheel', this.onWheel, {passive: false});
         canvas.addEventListener('contextmenu', this.onContextMenu);
     }
     detachMouseEvents (canvas) {
@@ -217,6 +225,11 @@ class Stage extends React.Component {
         if (drawableId === -1) return;
         const targetId = this.props.vm.getTargetIdForDrawableId(drawableId);
         if (targetId === null) return;
+        // Components (ROADMAP.md 階段 10): double-clicking an instance goes into it
+        if (this.props.vm.enterComponentAtDrawable) {
+            this.props.vm.enterComponentAtDrawable(drawableId);
+            return;
+        }
         this.props.vm.setEditingTarget(targetId);
     }
     onMouseMove (e) {
@@ -341,9 +354,13 @@ class Stage extends React.Component {
         }
     }
     onWheel (e) {
+        // Pinching a trackpad is the wheel with ctrl held (twmouse): it would zoom the page
+        if (e.ctrlKey) e.preventDefault();
         const data = {
             deltaX: e.deltaX,
-            deltaY: e.deltaY
+            deltaY: e.deltaY,
+            deltaMode: e.deltaMode,
+            ctrlKey: e.ctrlKey
         };
         this.props.vm.postIOData('mouseWheel', data);
     }

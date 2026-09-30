@@ -1,0 +1,2885 @@
+[
+ {
+  "name": "按鈕",
+  "id": "button",
+  "tags": [
+   "UI"
+  ],
+  "thumbnail": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"240\" height=\"35\" viewBox=\"0 0 240 35\"><rect x=\"0.5\" y=\"0.5\" width=\"121\" height=\"34\" rx=\"7\" fill=\"#1f9e8f\" fill-opacity=\"1\" stroke=\"#146b61\"/><text x=\"61\" y=\"23\" font-size=\"16\" font-family=\"sans-serif\" fill=\"#ffffff\" text-anchor=\"middle\">按鈕</text></svg>",
+  "component": {
+   "meta": {
+    "format": "3dsc",
+    "formatVersion": 1,
+    "semver": "3.0.0",
+    "platform": {
+     "name": "Blocks3D",
+     "url": ""
+    }
+   },
+   "root": "cmp_button",
+   "instance": {
+    "isStage": false,
+    "name": "按鈕",
+    "kind": "2d",
+    "x": 0,
+    "y": 0,
+    "component": "cmp_button"
+   },
+   "components": {
+    "cmp_button": {
+     "name": "按鈕",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "文字",
+       "type": "string",
+       "default": "按鈕"
+      },
+      {
+       "name": "寬度",
+       "type": "number",
+       "default": 122
+      },
+      {
+       "name": "開",
+       "type": "boolean",
+       "default": false
+      },
+      {
+       "name": "可切換",
+       "type": "boolean",
+       "default": false
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "t1": {
+        "opcode": "control_whenframe",
+        "next": "t3",
+        "parent": null,
+        "inputs": {
+         "DT": [
+          1,
+          "t2"
+         ]
+        },
+        "fields": {
+         "PHASE": [
+          "update",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "t2": {
+        "opcode": "control_foreachframe_deltatime",
+        "next": null,
+        "parent": "t1",
+        "inputs": {},
+        "fields": {},
+        "shadow": true,
+        "topLevel": false
+       },
+       "t3": {
+        "opcode": "twdata_set",
+        "next": null,
+        "parent": "t1",
+        "inputs": {
+         "PATH": [
+          1,
+          [
+           10,
+           "hover"
+          ]
+         ],
+         "VALUE": [
+          3,
+          "t4",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t4": {
+        "opcode": "sensing_touchingobject",
+        "next": null,
+        "parent": "t3",
+        "inputs": {
+         "TOUCHINGOBJECTMENU": [
+          1,
+          "t5"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t5": {
+        "opcode": "sensing_touchingobjectmenu",
+        "next": null,
+        "parent": "t4",
+        "inputs": {},
+        "fields": {
+         "TOUCHINGOBJECTMENU": [
+          "_mouse_",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t6": {
+        "opcode": "event_whenthisspriteclicked",
+        "next": "t7",
+        "parent": null,
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 192
+       },
+       "t7": {
+        "opcode": "control_if",
+        "next": "tc",
+        "parent": "t6",
+        "inputs": {
+         "CONDITION": [
+          2,
+          "t8"
+         ],
+         "SUBSTACK": [
+          2,
+          "t9"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t8": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t7",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "可切換",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t9": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "t7",
+        "inputs": {
+         "VALUE": [
+          3,
+          "ta",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "ta": {
+        "opcode": "operator_not",
+        "next": null,
+        "parent": "t9",
+        "inputs": {
+         "OPERAND": [
+          2,
+          "tb"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "tb": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "ta",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "tc": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "t7",
+        "inputs": {
+         "on": [
+          2,
+          "td"
+         ]
+        },
+        "fields": {
+         "PORT": [
+          "pressed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "td": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "tc",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "按鈕",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "a40a6c387566e492dc712c0302e3dd2a",
+        "md5ext": "a40a6c387566e492dc712c0302e3dd2a.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 35
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [
+      {
+       "id": "pressed",
+       "proccode": "被點擊 開啟 %b",
+       "params": [
+        {
+         "id": "on",
+         "name": "開啟",
+         "type": "b"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "extensions": [
+    "twdata",
+    "twcomp"
+   ]
+  },
+  "files": {
+   "a40a6c387566e492dc712c0302e3dd2a.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"240\" height=\"35\" viewBox=\"0 0 240 35\"><rect x=\"0.5\" y=\"0.5\" width=\"{寬度 - 1}\" height=\"34\" rx=\"7\" fill=\"{開 ? '#146b61' : '#1f9e8f'}\" fill-opacity=\"{hover ? 0.85 : 1}\" stroke=\"#146b61\"/><text x=\"{寬度 / 2}\" y=\"23\" font-size=\"16\" font-family=\"sans-serif\" fill=\"#ffffff\" text-anchor=\"middle\">{文字}</text></svg>"
+  }
+ },
+ {
+  "name": "開關",
+  "id": "switch",
+  "tags": [
+   "UI"
+  ],
+  "thumbnail": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"72\" height=\"36\" viewBox=\"0 0 72 36\"><rect x=\"1\" y=\"4\" width=\"70\" height=\"28\" rx=\"14\" fill=\"#b7c0c4\"/><circle cx=\"17\" cy=\"18\" r=\"12\" fill=\"#ffffff\" stroke=\"#00000022\"/></svg>",
+  "component": {
+   "meta": {
+    "format": "3dsc",
+    "formatVersion": 1,
+    "semver": "3.0.0",
+    "platform": {
+     "name": "Blocks3D",
+     "url": ""
+    }
+   },
+   "root": "cmp_switch",
+   "instance": {
+    "isStage": false,
+    "name": "開關",
+    "kind": "2d",
+    "x": 0,
+    "y": 0,
+    "component": "cmp_switch"
+   },
+   "components": {
+    "cmp_switch": {
+     "name": "開關",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "開",
+       "type": "boolean",
+       "default": false
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "tf": {
+        "opcode": "event_whenthisspriteclicked",
+        "next": "tg",
+        "parent": null,
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "tg": {
+        "opcode": "twcomp_setProp",
+        "next": "tj",
+        "parent": "tf",
+        "inputs": {
+         "VALUE": [
+          3,
+          "th",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "th": {
+        "opcode": "operator_not",
+        "next": null,
+        "parent": "tg",
+        "inputs": {
+         "OPERAND": [
+          2,
+          "ti"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "ti": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "th",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "tj": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "tg",
+        "inputs": {
+         "on": [
+          2,
+          "tk"
+         ]
+        },
+        "fields": {
+         "PORT": [
+          "changed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "tk": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "tj",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "tl": {
+        "opcode": "procedures_definition",
+        "next": "tn",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_switch_set"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_switch_set": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "tl",
+        "inputs": {
+         "te": [
+          1,
+          "tm"
+         ]
+        },
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "設定 %b",
+         "argumentids": "[\"te\"]",
+         "argumentnames": "[\"on\"]",
+         "argumentdefaults": "[\"false\"]",
+         "warp": "false"
+        }
+       },
+       "tm": {
+        "opcode": "argument_reporter_boolean",
+        "next": null,
+        "parent": "p_switch_set",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "on",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "tn": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "tl",
+        "inputs": {
+         "VALUE": [
+          3,
+          "to",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "to": {
+        "opcode": "argument_reporter_boolean",
+        "next": null,
+        "parent": "tn",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "on",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "開關",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "b9ef1805cdecba5521f7ccfa3e14d2d7",
+        "md5ext": "b9ef1805cdecba5521f7ccfa3e14d2d7.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 36
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [
+      {
+       "id": "changed",
+       "proccode": "切換 開啟 %b",
+       "params": [
+        {
+         "id": "on",
+         "name": "開啟",
+         "type": "b"
+        }
+       ]
+      }
+     ],
+     "interface": {
+      "events": [],
+      "public": [
+       "p_switch_set"
+      ]
+     }
+    }
+   },
+   "extensions": [
+    "twcomp"
+   ]
+  },
+  "files": {
+   "b9ef1805cdecba5521f7ccfa3e14d2d7.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"72\" height=\"36\" viewBox=\"0 0 72 36\"><rect x=\"1\" y=\"4\" width=\"70\" height=\"28\" rx=\"14\" fill=\"{開 ? '#1f9e8f' : '#b7c0c4'}\"/><circle cx=\"{開 ? 55 : 17}\" cy=\"18\" r=\"12\" fill=\"#ffffff\" stroke=\"#00000022\"/></svg>"
+  }
+ },
+ {
+  "name": "滑桿",
+  "id": "slider",
+  "tags": [
+   "UI"
+  ],
+  "thumbnail": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"30\" viewBox=\"0 0 400 30\"><rect x=\"0\" y=\"12\" width=\"200\" height=\"6\" rx=\"3\" fill=\"#cfd8dc\"/><rect x=\"0\" y=\"12\" width=\"100\" height=\"6\" rx=\"3\" fill=\"#1f9e8f\"/><circle cx=\"100\" cy=\"15\" r=\"9\" fill=\"#ffffff\" stroke=\"#1f9e8f\" stroke-width=\"2\"/></svg>",
+  "component": {
+   "meta": {
+    "format": "3dsc",
+    "formatVersion": 1,
+    "semver": "3.0.0",
+    "platform": {
+     "name": "Blocks3D",
+     "url": ""
+    }
+   },
+   "root": "cmp_slider",
+   "instance": {
+    "isStage": false,
+    "name": "滑桿",
+    "kind": "2d",
+    "x": 0,
+    "y": 0,
+    "component": "cmp_slider"
+   },
+   "components": {
+    "cmp_slider": {
+     "name": "滑桿",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "值",
+       "type": "number",
+       "default": 50
+      },
+      {
+       "name": "最小",
+       "type": "number",
+       "default": 0
+      },
+      {
+       "name": "最大",
+       "type": "number",
+       "default": 100
+      },
+      {
+       "name": "寬度",
+       "type": "number",
+       "default": 200
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "tq": {
+        "opcode": "event_whenthisspriteclicked",
+        "next": "tr",
+        "parent": null,
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "tr": {
+        "opcode": "twdata_set",
+        "next": null,
+        "parent": "tq",
+        "inputs": {
+         "PATH": [
+          1,
+          [
+           10,
+           "拖著"
+          ]
+         ],
+         "VALUE": [
+          1,
+          [
+           10,
+           "1"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "ts": {
+        "opcode": "control_whenframe",
+        "next": "tu",
+        "parent": null,
+        "inputs": {
+         "DT": [
+          1,
+          "tt"
+         ]
+        },
+        "fields": {
+         "PHASE": [
+          "update",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 192
+       },
+       "tt": {
+        "opcode": "control_foreachframe_deltatime",
+        "next": null,
+        "parent": "ts",
+        "inputs": {},
+        "fields": {},
+        "shadow": true,
+        "topLevel": false
+       },
+       "tu": {
+        "opcode": "control_if",
+        "next": null,
+        "parent": "ts",
+        "inputs": {
+         "CONDITION": [
+          2,
+          "tv"
+         ],
+         "SUBSTACK": [
+          2,
+          "tx"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "tv": {
+        "opcode": "operator_equals",
+        "next": null,
+        "parent": "tu",
+        "inputs": {
+         "OPERAND1": [
+          3,
+          "tw",
+          [
+           10,
+           ""
+          ]
+         ],
+         "OPERAND2": [
+          1,
+          [
+           10,
+           "1"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "tw": {
+        "opcode": "twdata_get",
+        "next": null,
+        "parent": "tv",
+        "inputs": {
+         "PATH": [
+          1,
+          [
+           10,
+           "拖著"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "tx": {
+        "opcode": "control_if_else",
+        "next": null,
+        "parent": "tu",
+        "inputs": {
+         "CONDITION": [
+          2,
+          "ty"
+         ],
+         "SUBSTACK": [
+          2,
+          "tz"
+         ],
+         "SUBSTACK2": [
+          2,
+          "t1l"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "ty": {
+        "opcode": "sensing_mousedown",
+        "next": null,
+        "parent": "tx",
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "tz": {
+        "opcode": "twlocalvars_setVariable",
+        "next": "t1c",
+        "parent": "tx",
+        "inputs": {
+         "NAME": [
+          1,
+          [
+           10,
+           "新值"
+          ]
+         ],
+         "VALUE": [
+          3,
+          "t10",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t10": {
+        "opcode": "twmath_clamp",
+        "next": null,
+        "parent": "tz",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t11",
+          [
+           4,
+           ""
+          ]
+         ],
+         "MIN": [
+          3,
+          "t1a",
+          [
+           4,
+           ""
+          ]
+         ],
+         "MAX": [
+          3,
+          "t1b",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t11": {
+        "opcode": "operator_add",
+        "next": null,
+        "parent": "t10",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t12",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t19",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t12": {
+        "opcode": "operator_multiply",
+        "next": null,
+        "parent": "t11",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t13",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t16",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t13": {
+        "opcode": "operator_divide",
+        "next": null,
+        "parent": "t12",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t14",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t15",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t14": {
+        "opcode": "sensing_mousex",
+        "next": null,
+        "parent": "t13",
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t15": {
+        "opcode": "twdata_get",
+        "next": null,
+        "parent": "t13",
+        "inputs": {
+         "PATH": [
+          1,
+          [
+           10,
+           "寬度"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t16": {
+        "opcode": "operator_subtract",
+        "next": null,
+        "parent": "t12",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t17",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t18",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t17": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t16",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最大",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t18": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t16",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最小",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t19": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t11",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最小",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1a": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t10",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最小",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1b": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t10",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最大",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1c": {
+        "opcode": "control_if",
+        "next": null,
+        "parent": "tz",
+        "inputs": {
+         "CONDITION": [
+          2,
+          "t1d"
+         ],
+         "SUBSTACK": [
+          2,
+          "t1h"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1d": {
+        "opcode": "operator_not",
+        "next": null,
+        "parent": "t1c",
+        "inputs": {
+         "OPERAND": [
+          2,
+          "t1e"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1e": {
+        "opcode": "operator_equals",
+        "next": null,
+        "parent": "t1d",
+        "inputs": {
+         "OPERAND1": [
+          3,
+          "t1f",
+          [
+           10,
+           ""
+          ]
+         ],
+         "OPERAND2": [
+          3,
+          "t1g",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1f": {
+        "opcode": "twlocalvars_getVariable",
+        "next": null,
+        "parent": "t1e",
+        "inputs": {
+         "NAME": [
+          1,
+          [
+           10,
+           "新值"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1g": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t1e",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "值",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1h": {
+        "opcode": "twcomp_setProp",
+        "next": "t1j",
+        "parent": "t1c",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t1i",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "值",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1i": {
+        "opcode": "twlocalvars_getVariable",
+        "next": null,
+        "parent": "t1h",
+        "inputs": {
+         "NAME": [
+          1,
+          [
+           10,
+           "新值"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1j": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "t1h",
+        "inputs": {
+         "value": [
+          2,
+          "t1k"
+         ]
+        },
+        "fields": {
+         "PORT": [
+          "changed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1k": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t1j",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "值",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1l": {
+        "opcode": "twdata_set",
+        "next": null,
+        "parent": "tx",
+        "inputs": {
+         "PATH": [
+          1,
+          [
+           10,
+           "拖著"
+          ]
+         ],
+         "VALUE": [
+          1,
+          [
+           10,
+           "0"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1m": {
+        "opcode": "procedures_definition",
+        "next": "t1o",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_slider_set"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_slider_set": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t1m",
+        "inputs": {
+         "tp": [
+          1,
+          "t1n"
+         ]
+        },
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "設定值 %s",
+         "argumentids": "[\"tp\"]",
+         "argumentnames": "[\"v\"]",
+         "argumentdefaults": "[\"\"]",
+         "warp": "false"
+        }
+       },
+       "t1n": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "p_slider_set",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "v",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t1o": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "t1m",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t1p",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "值",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1p": {
+        "opcode": "twmath_clamp",
+        "next": null,
+        "parent": "t1o",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t1q",
+          [
+           4,
+           ""
+          ]
+         ],
+         "MIN": [
+          3,
+          "t1r",
+          [
+           4,
+           ""
+          ]
+         ],
+         "MAX": [
+          3,
+          "t1s",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1q": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "t1p",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "v",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1r": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t1p",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最小",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1s": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t1p",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最大",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "滑桿",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "018adb0399615fc0a2e5da614ce1d04d",
+        "md5ext": "018adb0399615fc0a2e5da614ce1d04d.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 15
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [
+      {
+       "id": "changed",
+       "proccode": "改變 值 %s",
+       "params": [
+        {
+         "id": "value",
+         "name": "值",
+         "type": "s"
+        }
+       ]
+      }
+     ],
+     "interface": {
+      "events": [],
+      "public": [
+       "p_slider_set"
+      ]
+     }
+    }
+   },
+   "extensions": [
+    "twdata",
+    "twlocalvars",
+    "twmath",
+    "twcomp"
+   ]
+  },
+  "files": {
+   "018adb0399615fc0a2e5da614ce1d04d.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"30\" viewBox=\"0 0 400 30\"><rect x=\"0\" y=\"12\" width=\"{寬度}\" height=\"6\" rx=\"3\" fill=\"#cfd8dc\"/><rect x=\"0\" y=\"12\" width=\"{(值 - 最小) / max(最大 - 最小, 0.0001) * 寬度}\" height=\"6\" rx=\"3\" fill=\"#1f9e8f\"/><circle cx=\"{(值 - 最小) / max(最大 - 最小, 0.0001) * 寬度}\" cy=\"15\" r=\"9\" fill=\"#ffffff\" stroke=\"#1f9e8f\" stroke-width=\"2\"/></svg>"
+  }
+ },
+ {
+  "name": "血條",
+  "id": "healthbar",
+  "tags": [
+   "UI"
+  ],
+  "thumbnail": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"24\" viewBox=\"0 0 400 24\"><rect x=\"0.5\" y=\"0.5\" width=\"199\" height=\"23\" rx=\"5\" fill=\"#263238\" fill-opacity=\"0.65\"/><rect x=\"2\" y=\"2\" width=\"196\" height=\"20\" rx=\"4\" fill=\"#43a047\"/><text x=\"100\" y=\"17\" font-size=\"13\" font-family=\"sans-serif\" fill=\"#ffffff\" text-anchor=\"middle\">100 / 100</text></svg>",
+  "component": {
+   "meta": {
+    "format": "3dsc",
+    "formatVersion": 1,
+    "semver": "3.0.0",
+    "platform": {
+     "name": "Blocks3D",
+     "url": ""
+    }
+   },
+   "root": "cmp_healthbar",
+   "instance": {
+    "isStage": false,
+    "name": "血條",
+    "kind": "2d",
+    "x": 0,
+    "y": 0,
+    "component": "cmp_healthbar"
+   },
+   "components": {
+    "cmp_healthbar": {
+     "name": "血條",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "目前",
+       "type": "number",
+       "default": 100
+      },
+      {
+       "name": "最大",
+       "type": "number",
+       "default": 100
+      },
+      {
+       "name": "寬度",
+       "type": "number",
+       "default": 200
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "t1v": {
+        "opcode": "procedures_definition",
+        "next": "t1x",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_healthbar_hurt"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_healthbar_hurt": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t1v",
+        "inputs": {
+         "t1t": [
+          1,
+          "t1w"
+         ]
+        },
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "扣血 %s",
+         "argumentids": "[\"t1t\"]",
+         "argumentnames": "[\"n\"]",
+         "argumentdefaults": "[\"\"]",
+         "warp": "false"
+        }
+       },
+       "t1w": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "p_healthbar_hurt",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t1x": {
+        "opcode": "twcomp_setProp",
+        "next": "t23",
+        "parent": "t1v",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t1y",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "目前",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1y": {
+        "opcode": "twmath_clamp",
+        "next": null,
+        "parent": "t1x",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t1z",
+          [
+           4,
+           ""
+          ]
+         ],
+         "MIN": [
+          1,
+          [
+           4,
+           "0"
+          ]
+         ],
+         "MAX": [
+          3,
+          "t22",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t1z": {
+        "opcode": "operator_subtract",
+        "next": null,
+        "parent": "t1y",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t20",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t21",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t20": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t1z",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "目前",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t21": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "t1z",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t22": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t1y",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最大",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t23": {
+        "opcode": "control_if",
+        "next": null,
+        "parent": "t1x",
+        "inputs": {
+         "CONDITION": [
+          2,
+          "t24"
+         ],
+         "SUBSTACK": [
+          2,
+          "t26"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t24": {
+        "opcode": "operator_equals",
+        "next": null,
+        "parent": "t23",
+        "inputs": {
+         "OPERAND1": [
+          3,
+          "t25",
+          [
+           10,
+           ""
+          ]
+         ],
+         "OPERAND2": [
+          1,
+          [
+           10,
+           "0"
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t25": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t24",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "目前",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t26": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "t23",
+        "inputs": {},
+        "fields": {
+         "PORT": [
+          "empty",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t27": {
+        "opcode": "procedures_definition",
+        "next": "t29",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_healthbar_heal"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_healthbar_heal": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t27",
+        "inputs": {
+         "t1u": [
+          1,
+          "t28"
+         ]
+        },
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "補血 %s",
+         "argumentids": "[\"t1u\"]",
+         "argumentnames": "[\"n\"]",
+         "argumentdefaults": "[\"\"]",
+         "warp": "false"
+        }
+       },
+       "t28": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "p_healthbar_heal",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t29": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "t27",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t2a",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "目前",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2a": {
+        "opcode": "twmath_clamp",
+        "next": null,
+        "parent": "t29",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t2b",
+          [
+           4,
+           ""
+          ]
+         ],
+         "MIN": [
+          1,
+          [
+           4,
+           "0"
+          ]
+         ],
+         "MAX": [
+          3,
+          "t2e",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2b": {
+        "opcode": "operator_add",
+        "next": null,
+        "parent": "t2a",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t2c",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t2d",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2c": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t2b",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "目前",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2d": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "t2b",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2e": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t2a",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "最大",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "血條",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "1c2601c21179525b3b72d3a69531e49e",
+        "md5ext": "1c2601c21179525b3b72d3a69531e49e.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 24
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [
+      {
+       "id": "empty",
+       "proccode": "歸零",
+       "params": []
+      }
+     ],
+     "interface": {
+      "events": [],
+      "public": [
+       "p_healthbar_hurt",
+       "p_healthbar_heal"
+      ]
+     }
+    }
+   },
+   "extensions": [
+    "twcomp",
+    "twmath"
+   ]
+  },
+  "files": {
+   "1c2601c21179525b3b72d3a69531e49e.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"400\" height=\"24\" viewBox=\"0 0 400 24\"><rect x=\"0.5\" y=\"0.5\" width=\"{寬度 - 1}\" height=\"23\" rx=\"5\" fill=\"#263238\" fill-opacity=\"0.65\"/><rect x=\"2\" y=\"2\" width=\"{clamp(目前 / max(最大, 1), 0, 1) * (寬度 - 4)}\" height=\"20\" rx=\"4\" fill=\"{目前 / max(最大, 1) < 0.3 ? '#e53935' : '#43a047'}\"/><text x=\"{寬度 / 2}\" y=\"17\" font-size=\"13\" font-family=\"sans-serif\" fill=\"#ffffff\" text-anchor=\"middle\">{round(目前)} / {最大}</text></svg>"
+  }
+ },
+ {
+  "name": "計數",
+  "id": "counter",
+  "tags": [
+   "UI"
+  ],
+  "thumbnail": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"34\" viewBox=\"0 0 320 34\"><text x=\"0\" y=\"26\" font-size=\"26\" font-family=\"sans-serif\" fill=\"#263238\">0</text></svg>",
+  "component": {
+   "meta": {
+    "format": "3dsc",
+    "formatVersion": 1,
+    "semver": "3.0.0",
+    "platform": {
+     "name": "Blocks3D",
+     "url": ""
+    }
+   },
+   "root": "cmp_counter",
+   "instance": {
+    "isStage": false,
+    "name": "計數",
+    "kind": "2d",
+    "x": 0,
+    "y": 0,
+    "component": "cmp_counter"
+   },
+   "components": {
+    "cmp_counter": {
+     "name": "計數",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "數量",
+       "type": "number",
+       "default": 0
+      },
+      {
+       "name": "前綴",
+       "type": "string",
+       "default": ""
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "t2h": {
+        "opcode": "procedures_definition",
+        "next": "t2j",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_counter_add"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_counter_add": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t2h",
+        "inputs": {
+         "t2f": [
+          1,
+          "t2i"
+         ]
+        },
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "增加 %s",
+         "argumentids": "[\"t2f\"]",
+         "argumentnames": "[\"n\"]",
+         "argumentdefaults": "[\"\"]",
+         "warp": "false"
+        }
+       },
+       "t2i": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "p_counter_add",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t2j": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "t2h",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t2k",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "數量",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2k": {
+        "opcode": "operator_add",
+        "next": null,
+        "parent": "t2j",
+        "inputs": {
+         "NUM1": [
+          3,
+          "t2l",
+          [
+           4,
+           ""
+          ]
+         ],
+         "NUM2": [
+          3,
+          "t2m",
+          [
+           4,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2l": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t2k",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "數量",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2m": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "t2k",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2n": {
+        "opcode": "procedures_definition",
+        "next": "t2p",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_counter_set"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_counter_set": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t2n",
+        "inputs": {
+         "t2g": [
+          1,
+          "t2o"
+         ]
+        },
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "設定 %s",
+         "argumentids": "[\"t2g\"]",
+         "argumentnames": "[\"n\"]",
+         "argumentdefaults": "[\"\"]",
+         "warp": "false"
+        }
+       },
+       "t2o": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "p_counter_set",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t2p": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "t2n",
+        "inputs": {
+         "VALUE": [
+          3,
+          "t2q",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "數量",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2q": {
+        "opcode": "argument_reporter_string_number",
+        "next": null,
+        "parent": "t2p",
+        "inputs": {},
+        "fields": {
+         "VALUE": [
+          "n",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "計數",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "742be41a5aa013ab52815b0309347926",
+        "md5ext": "742be41a5aa013ab52815b0309347926.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 34
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [],
+     "interface": {
+      "events": [],
+      "public": [
+       "p_counter_add",
+       "p_counter_set"
+      ]
+     }
+    }
+   },
+   "extensions": [
+    "twcomp"
+   ]
+  },
+  "files": {
+   "742be41a5aa013ab52815b0309347926.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"34\" viewBox=\"0 0 320 34\"><text x=\"0\" y=\"26\" font-size=\"26\" font-family=\"sans-serif\" fill=\"#263238\">{前綴}{數量}</text></svg>"
+  }
+ },
+ {
+  "name": "對話框",
+  "id": "dialog",
+  "tags": [
+   "UI"
+  ],
+  "thumbnail": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"150\" viewBox=\"0 0 320 150\"><rect x=\"0.5\" y=\"0.5\" width=\"319\" height=\"149\" rx=\"10\" fill=\"#ffffff\" stroke=\"#b0bec5\"/><text x=\"18\" y=\"34\" font-size=\"20\" font-weight=\"bold\" font-family=\"sans-serif\" fill=\"#263238\">提示</text><text x=\"18\" y=\"66\" font-size=\"15\" font-family=\"sans-serif\" fill=\"#455a64\">確定要繼續嗎？</text></svg>",
+  "component": {
+   "meta": {
+    "format": "3dsc",
+    "formatVersion": 1,
+    "semver": "3.0.0",
+    "platform": {
+     "name": "Blocks3D",
+     "url": ""
+    }
+   },
+   "root": "cmp_dialog",
+   "instance": {
+    "isStage": false,
+    "name": "對話框",
+    "kind": "2d",
+    "x": 0,
+    "y": 0,
+    "component": "cmp_dialog"
+   },
+   "components": {
+    "cmp_dialog": {
+     "name": "對話框",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "標題",
+       "type": "string",
+       "default": "提示"
+      },
+      {
+       "name": "內容",
+       "type": "string",
+       "default": "確定要繼續嗎？"
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "t2r": {
+        "opcode": "twcomp_whenOutput",
+        "next": "t2t",
+        "parent": null,
+        "inputs": {
+         "on": [
+          1,
+          "t2s"
+         ]
+        },
+        "fields": {
+         "SPRITE": [
+          "確定",
+          null
+         ],
+         "PORT": [
+          "pressed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "t2s": {
+        "opcode": "twcomp_outputParam",
+        "next": null,
+        "parent": "t2r",
+        "inputs": {},
+        "fields": {
+         "PORT": [
+          "pressed",
+          null
+         ],
+         "PARAM": [
+          "on",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t2t": {
+        "opcode": "looks_hide",
+        "next": "t2u",
+        "parent": "t2r",
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2u": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "t2t",
+        "inputs": {},
+        "fields": {
+         "PORT": [
+          "confirmed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2v": {
+        "opcode": "twcomp_whenOutput",
+        "next": "t2x",
+        "parent": null,
+        "inputs": {
+         "on": [
+          1,
+          "t2w"
+         ]
+        },
+        "fields": {
+         "SPRITE": [
+          "取消",
+          null
+         ],
+         "PORT": [
+          "pressed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 240
+       },
+       "t2w": {
+        "opcode": "twcomp_outputParam",
+        "next": null,
+        "parent": "t2v",
+        "inputs": {},
+        "fields": {
+         "PORT": [
+          "pressed",
+          null
+         ],
+         "PARAM": [
+          "on",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t2x": {
+        "opcode": "looks_hide",
+        "next": "t2y",
+        "parent": "t2v",
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2y": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "t2x",
+        "inputs": {},
+        "fields": {
+         "PORT": [
+          "cancelled",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t2z": {
+        "opcode": "procedures_definition",
+        "next": "t30",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_dialog_show"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_dialog_show": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t2z",
+        "inputs": {},
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "顯示",
+         "argumentids": "[]",
+         "argumentnames": "[]",
+         "argumentdefaults": "[]",
+         "warp": "false"
+        }
+       },
+       "t30": {
+        "opcode": "looks_show",
+        "next": null,
+        "parent": "t2z",
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t31": {
+        "opcode": "procedures_definition",
+        "next": "t32",
+        "parent": null,
+        "inputs": {
+         "custom_block": [
+          1,
+          "p_dialog_hide"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "p_dialog_hide": {
+        "opcode": "procedures_prototype",
+        "next": null,
+        "parent": "t31",
+        "inputs": {},
+        "fields": {},
+        "shadow": true,
+        "topLevel": false,
+        "mutation": {
+         "tagName": "mutation",
+         "children": [],
+         "proccode": "隱藏",
+         "argumentids": "[]",
+         "argumentnames": "[]",
+         "argumentdefaults": "[]",
+         "warp": "false"
+        }
+       },
+       "t32": {
+        "opcode": "looks_hide",
+        "next": null,
+        "parent": "t31",
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "對話框",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "346efd87708a884df4871b624d53e716",
+        "md5ext": "346efd87708a884df4871b624d53e716.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 150
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [
+      {
+       "id": "confirmed",
+       "proccode": "按了確定",
+       "params": []
+      },
+      {
+       "id": "cancelled",
+       "proccode": "按了取消",
+       "params": []
+      }
+     ],
+     "interface": {
+      "events": [],
+      "public": [
+       "p_dialog_show",
+       "p_dialog_hide"
+      ]
+     },
+     "members": [
+      {
+       "key": "ok",
+       "kind": "component",
+       "name": "確定",
+       "x": 122,
+       "y": 14,
+       "size": 100,
+       "direction": 90,
+       "visible": true,
+       "currentCostume": 0,
+       "rotationStyle": "all around",
+       "draggable": false,
+       "component": "cmp_button",
+       "props": {
+        "文字": "確定",
+        "寬度": 88
+       }
+      },
+      {
+       "key": "cancel",
+       "kind": "component",
+       "name": "取消",
+       "x": 218,
+       "y": 14,
+       "size": 100,
+       "direction": 90,
+       "visible": true,
+       "currentCostume": 0,
+       "rotationStyle": "all around",
+       "draggable": false,
+       "component": "cmp_button",
+       "props": {
+        "文字": "取消",
+        "寬度": 88
+       }
+      }
+     ]
+    },
+    "cmp_button": {
+     "name": "按鈕",
+     "color": "#1f9e8f",
+     "props": [
+      {
+       "name": "文字",
+       "type": "string",
+       "default": "按鈕"
+      },
+      {
+       "name": "寬度",
+       "type": "number",
+       "default": 122
+      },
+      {
+       "name": "開",
+       "type": "boolean",
+       "default": false
+      },
+      {
+       "name": "可切換",
+       "type": "boolean",
+       "default": false
+      }
+     ],
+     "root": {
+      "variables": {},
+      "lists": {},
+      "broadcasts": {},
+      "blocks": {
+       "t1": {
+        "opcode": "control_whenframe",
+        "next": "t3",
+        "parent": null,
+        "inputs": {
+         "DT": [
+          1,
+          "t2"
+         ]
+        },
+        "fields": {
+         "PHASE": [
+          "update",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 0
+       },
+       "t2": {
+        "opcode": "control_foreachframe_deltatime",
+        "next": null,
+        "parent": "t1",
+        "inputs": {},
+        "fields": {},
+        "shadow": true,
+        "topLevel": false
+       },
+       "t3": {
+        "opcode": "twdata_set",
+        "next": null,
+        "parent": "t1",
+        "inputs": {
+         "PATH": [
+          1,
+          [
+           10,
+           "hover"
+          ]
+         ],
+         "VALUE": [
+          3,
+          "t4",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t4": {
+        "opcode": "sensing_touchingobject",
+        "next": null,
+        "parent": "t3",
+        "inputs": {
+         "TOUCHINGOBJECTMENU": [
+          1,
+          "t5"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t5": {
+        "opcode": "sensing_touchingobjectmenu",
+        "next": null,
+        "parent": "t4",
+        "inputs": {},
+        "fields": {
+         "TOUCHINGOBJECTMENU": [
+          "_mouse_",
+          null
+         ]
+        },
+        "shadow": true,
+        "topLevel": false
+       },
+       "t6": {
+        "opcode": "event_whenthisspriteclicked",
+        "next": "t7",
+        "parent": null,
+        "inputs": {},
+        "fields": {},
+        "shadow": false,
+        "topLevel": true,
+        "x": 0,
+        "y": 192
+       },
+       "t7": {
+        "opcode": "control_if",
+        "next": "tc",
+        "parent": "t6",
+        "inputs": {
+         "CONDITION": [
+          2,
+          "t8"
+         ],
+         "SUBSTACK": [
+          2,
+          "t9"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "t8": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "t7",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "可切換",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "t9": {
+        "opcode": "twcomp_setProp",
+        "next": null,
+        "parent": "t7",
+        "inputs": {
+         "VALUE": [
+          3,
+          "ta",
+          [
+           10,
+           ""
+          ]
+         ]
+        },
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "ta": {
+        "opcode": "operator_not",
+        "next": null,
+        "parent": "t9",
+        "inputs": {
+         "OPERAND": [
+          2,
+          "tb"
+         ]
+        },
+        "fields": {},
+        "shadow": false,
+        "topLevel": false
+       },
+       "tb": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "ta",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "tc": {
+        "opcode": "twcomp_emit",
+        "next": null,
+        "parent": "t7",
+        "inputs": {
+         "on": [
+          2,
+          "td"
+         ]
+        },
+        "fields": {
+         "PORT": [
+          "pressed",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       },
+       "td": {
+        "opcode": "twcomp_prop",
+        "next": null,
+        "parent": "tc",
+        "inputs": {},
+        "fields": {
+         "PROP": [
+          "開",
+          null
+         ]
+        },
+        "shadow": false,
+        "topLevel": false
+       }
+      },
+      "comments": {},
+      "costumes": [
+       {
+        "name": "按鈕",
+        "bitmapResolution": 1,
+        "dataFormat": "svg",
+        "assetId": "a40a6c387566e492dc712c0302e3dd2a",
+        "md5ext": "a40a6c387566e492dc712c0302e3dd2a.svg",
+        "rotationCenterX": 0,
+        "rotationCenterY": 35
+       }
+      ],
+      "currentCostume": 0,
+      "volume": 100,
+      "kind": "2d"
+     },
+     "outputs": [
+      {
+       "id": "pressed",
+       "proccode": "被點擊 開啟 %b",
+       "params": [
+        {
+         "id": "on",
+         "name": "開啟",
+         "type": "b"
+        }
+       ]
+      }
+     ]
+    }
+   },
+   "extensions": [
+    "twcomp",
+    "twdata"
+   ]
+  },
+  "files": {
+   "346efd87708a884df4871b624d53e716.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"150\" viewBox=\"0 0 320 150\"><rect x=\"0.5\" y=\"0.5\" width=\"319\" height=\"149\" rx=\"10\" fill=\"#ffffff\" stroke=\"#b0bec5\"/><text x=\"18\" y=\"34\" font-size=\"20\" font-weight=\"bold\" font-family=\"sans-serif\" fill=\"#263238\">{標題}</text><text x=\"18\" y=\"66\" font-size=\"15\" font-family=\"sans-serif\" fill=\"#455a64\">{內容}</text></svg>",
+   "a40a6c387566e492dc712c0302e3dd2a.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"240\" height=\"35\" viewBox=\"0 0 240 35\"><rect x=\"0.5\" y=\"0.5\" width=\"{寬度 - 1}\" height=\"34\" rx=\"7\" fill=\"{開 ? '#146b61' : '#1f9e8f'}\" fill-opacity=\"{hover ? 0.85 : 1}\" stroke=\"#146b61\"/><text x=\"{寬度 / 2}\" y=\"23\" font-size=\"16\" font-family=\"sans-serif\" fill=\"#ffffff\" text-anchor=\"middle\">{文字}</text></svg>"
+  }
+ }
+]

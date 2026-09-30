@@ -5,6 +5,8 @@ import {defineMessages, intlShape, injectIntl, FormattedMessage} from 'react-int
 
 import Box from '../box/box.jsx';
 import ActionMenu from '../action-menu/action-menu.jsx';
+import {BACKDROP_UPLOAD_ACCEPT} from '../../lib/tw-sky-backdrop';
+
 import styles from './stage-selector.css';
 import {isRtl} from '@turbowarp/scratch-l10n';
 
@@ -103,7 +105,7 @@ const StageSelector = props => {
                         title: intl.formatMessage(messages.addBackdropFromFile),
                         img: fileUploadIcon,
                         onClick: onBackdropFileUploadClick,
-                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .gif',
+                        fileAccept: BACKDROP_UPLOAD_ACCEPT,
                         fileChange: onBackdropFileUpload,
                         fileInput: fileInputRef,
                         fileMultiple: true

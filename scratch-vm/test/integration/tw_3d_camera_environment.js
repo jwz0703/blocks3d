@@ -7,6 +7,7 @@ const JSZip = require('@turbowarp/jszip');
 const VirtualMachine = require('../../src/virtual-machine');
 const BlockSupport = require('../../src/engine/block-support');
 const Environment = require('../../src/engine/scene-3d-environment');
+const SkyPacks = require('../../src/engine/scene-3d-sky-packs');
 const tw3dsb = require('../../src/serialization/3dsb');
 const makeTestStorage = require('../fixtures/make-test-storage');
 const dispatch = require('../../src/dispatch/central-dispatch');
@@ -369,6 +370,68 @@ test('sun angles', t => {
 });
 
 // Stage 6.5: cameras that follow 3D sprites
+test('each kind of sky has its own blocks', async t => {
+    const {vm, scene3D, sprite} = await makeVM();
+    t.same(Environment.SKY_EXTENSIONS, {
+        procedural: 'skyprocedural',
+        color: 'skycolor',
+        gradient: 'skycolor',
+        hdri: 'skyhdri'
+    });
+    // Backdrop packs: every kind of sky but 2D, with parameters that are keys of the sky
+    t.same(SkyPacks.SKY_PACKS.map(pack => pack.id), ['procedural', 'gradient', 'color', 'hdri']);
+    const sky = Environment.defaultEnvironment().sky;
+    for (const pack of SkyPacks.SKY_PACKS) {
+        t.ok(pack.params.every(param => param.key in sky), `${pack.id} parameters are in the sky`);
+        t.equal(Environment.defaultSkyEnvironment(pack.id).sky.type, pack.id);
+    }
+    t.equal(SkyPacks.getSkyPack('2d'), null, '2D backdrops are no pack');
+    for (const id of ['skyprocedural', 'skycolor', 'skyhdri']) {
+        t.ok(vm.extensionManager.isExtensionLoaded(id), `${id} is built in`);
+    }
+    // The sky blocks of 環境 still run, but moved to the sky extensions in the palette
+    const environmentInfo = vm.runtime._blockInfo.find(info => info.id === 'environment3d');
+    const hidden = environmentInfo.blocks
+        .filter(block => block.info.hideFromPalette)
+        .map(block => block.info.opcode);
+    t.same(hidden, ['setskytype', 'setskycolor', 'setclouds']);
+
+    // Only the current backdrop changes, and only when its sky is of the kind
+    vm.setEnvironment3D({sky: {type: '2d'}});
+    call(vm, 'skyprocedural_setclouds', {CLOUDS: 70}, sprite);
+    call(vm, 'skycolor_setcolor', {COLOR: '#ff0000'}, sprite);
+    t.same(scene3D.environment.sky, Environment.default2DEnvironment().sky, 'a 2D backdrop is unchanged');
+    t.equal(call(vm, 'skyprocedural_clouds', {}, sprite), 0);
+
+    vm.setEnvironment3D({sky: {type: 'procedural', clouds: 30}});
+    call(vm, 'skyprocedural_changeclouds', {CLOUDS: 20}, sprite);
+    t.equal(call(vm, 'skyprocedural_clouds', {}, sprite), 50);
+    call(vm, 'skyprocedural_setclouds', {CLOUDS: 120}, sprite);
+    call(vm, 'skyprocedural_setblur', {BLUR: 40}, sprite);
+    call(vm, 'skyhdri_setrotation', {DEGREES: 90}, sprite);
+    t.same([scene3D.environment.sky.clouds, scene3D.environment.sky.blur, scene3D.environment.sky.rotation],
+        [100, 40, 0], 'HDRI blocks don\'t change a procedural sky');
+
+    vm.setEnvironment3D({sky: {type: 'gradient'}});
+    call(vm, 'skycolor_setgradient', {PART: 'bottom', COLOR: '#00ff00'}, sprite);
+    t.equal(scene3D.environment.sky.bottom, '#00ff00');
+    call(vm, 'skycolor_setcolor', {COLOR: '#0000ff'}, sprite);
+    t.same([scene3D.environment.sky.top, scene3D.environment.sky.bottom], ['#0000ff', '#0000ff'],
+        'one color makes a gradient that color');
+    vm.setEnvironment3D({sky: {type: 'color'}});
+    call(vm, 'skycolor_setgradient', {PART: 'top', COLOR: '#ffffff'}, sprite);
+    t.equal(scene3D.environment.sky.top, '#0000ff', 'a one color sky has no gradient');
+    call(vm, 'skycolor_setcolor', {COLOR: '#123456'}, sprite);
+    t.equal(scene3D.environment.sky.color, '#123456');
+
+    vm.setEnvironment3D({sky: {type: 'hdri', rotation: 0}});
+    call(vm, 'skyhdri_setrotation', {DEGREES: 270}, sprite);
+    t.equal(call(vm, 'skyhdri_rotation', {}, sprite), -90, 'rotation stays from -180 to 180');
+    call(vm, 'skyhdri_turn', {DEGREES: -100}, sprite);
+    t.equal(call(vm, 'skyhdri_rotation', {}, sprite), 170);
+    t.end();
+});
+
 test('third person follow', async t => {
     const {vm, scene3D, box, main} = await makeVM();
     const pose = camera => [camera.x, camera.y, camera.z, camera.rotationY, camera.rotationX].map(round);
@@ -476,6 +539,161 @@ test('smooth follow', async t => {
     call(vm, 'camera3d_followfirstperson', {TARGET: '_myself_'}, box);
     const state = scene3D.getCameraState();
     t.same([state.x, state.y, state.z, state.yaw, state.pitch], [0, 1, 0, 0, 0]);
+    t.end();
+});
+
+test('orbiting a point or a sprite, like OrbitControls', async t => {
+    const {vm, scene3D, box, main, sprite} = await makeVM();
+    const pose = () => [main.x, main.y, main.z, main.rotationY, main.rotationX].map(round);
+    const mouse = vm.runtime.ioDevices.mouse;
+    const frame = (seconds = 1 / 60) => {
+        vm.runtime.ioDevices.mouseWheel.stepFrame();
+        scene3D.follow.update(seconds, true);
+    };
+    const at = (x, y, more) => Object.assign({x, y, canvasWidth: 480, canvasHeight: 360}, more);
+
+    call(vm, 'camera3d_setfollowangles', {YAW: 0, PITCH: 0}, main);
+    call(vm, 'camera3d_setorbitdamping', {DAMPING: 0}, main);
+    call(vm, 'camera3d_orbitpoint', {X: 1, Y: 2, Z: 3, DISTANCE: 10}, main);
+    t.same(pose(), [1, 2, 13, 0, 0], 'behind the point, looking at it');
+    t.equal(call(vm, 'camera3d_orbitdistance', {}, main), 10);
+    t.equal(call(vm, 'camera3d_following', {}, main), '', 'a point is not a sprite');
+
+    // Dragging from the stage: the whole height of the stage is 360 degrees
+    mouse.postData(at(240, 180, {isDown: true}));
+    t.ok(mouse.getPressTarget().isStage, 'pressed on nothing');
+    frame();
+    mouse.postData(at(270, 150));
+    frame();
+    t.same(pose().slice(3), [-30, 30], 'dragging right turns left around it, up looks up at it');
+    mouse.postData(at(270, 150, {isDown: false}));
+    t.equal(mouse.getPressTarget(), null);
+
+    // Damping: a part of the rest of the drag every frame, whatever the framerate
+    call(vm, 'camera3d_setfollowangles', {YAW: 0, PITCH: 0}, main);
+    call(vm, 'camera3d_setorbitdamping', {DAMPING: 0.5}, main);
+    mouse.postData(at(240, 180, {isDown: true}));
+    frame();
+    mouse.postData(at(276, 180, {isDown: true}));
+    frame();
+    t.equal(round(main.rotationY), -18, 'half of the drag in the first frame');
+    mouse.postData(at(276, 180, {isDown: false}));
+    frame();
+    t.equal(round(main.rotationY), -27, 'and it keeps turning after letting go');
+    frame(1 / 30);
+    t.equal(round(main.rotationY), round(-36 + (9 * 0.25)), 'two frames\' worth in a frame twice as long');
+    for (let i = 0; i < 200; i++) frame();
+    t.equal(Math.round(main.rotationY * 1000) / 1000, -36, 'all of the drag in the end');
+
+    // The wheel zooms, within the limits
+    vm.runtime.ioDevices.mouseWheel.postData({deltaY: -100, deltaMode: 0});
+    frame();
+    t.equal(call(vm, 'camera3d_orbitdistance', {}, main), round(10 * Math.exp(-0.15)));
+    call(vm, 'camera3d_setorbitdistancelimits', {MIN: 2, MAX: 5}, main);
+    t.equal(call(vm, 'camera3d_orbitdistance', {}, main), 5, 'limits apply right away');
+    call(vm, 'camera3d_setorbitdistance', {DISTANCE: 1}, main);
+    frame();
+    t.equal(call(vm, 'camera3d_orbitdistance', {}, main), 2);
+
+    // Pitch limits
+    call(vm, 'camera3d_setorbitpitchlimits', {MIN: -60, MAX: -10}, main);
+    call(vm, 'camera3d_setfollowangles', {YAW: 0, PITCH: 0}, main);
+    frame();
+    t.equal(round(main.rotationX), -10);
+    call(vm, 'camera3d_setfollowangles', {YAW: 0, PITCH: -90}, main);
+    frame();
+    t.equal(round(main.rotationX), -60);
+
+    // Turning by itself
+    call(vm, 'camera3d_setorbitautospeed', {SPEED: 30}, main);
+    call(vm, 'camera3d_setfollowangles', {YAW: 0, PITCH: -30}, main);
+    frame(0.25);
+    frame(0.25);
+    t.equal(round(main.rotationY), 15, '30 degrees a second');
+    call(vm, 'camera3d_setorbitautospeed', {SPEED: 0}, main);
+
+    // Dragging from a 3D sprite that only collides (like the ground) turns it, from a sprite that uses the mouse
+    // (or a 2D sprite) not; turning off the controls neither
+    call(vm, 'camera3d_setorbitdamping', {DAMPING: 0}, main);
+    call(vm, 'camera3d_setfollowangles', {YAW: 0, PITCH: -30}, main);
+    mouse.postData(at(240, 180, {isDown: true}));
+    mouse._pressTarget = box;
+    frame();
+    mouse.postData(at(252, 180));
+    frame();
+    t.equal(round(main.rotationY), -12, 'a drag from the ground');
+    mouse.postData(at(252, 180, {isDown: false}));
+    const yaw = main.rotationY;
+    for (const [pressed, what] of [[box, 'a draggable sprite'], [sprite, 'a 2D sprite']]) {
+        box.setDraggable(true);
+        mouse.postData(at(240, 180, {isDown: true}));
+        mouse._pressTarget = pressed;
+        frame();
+        mouse.postData(at(300, 180));
+        frame();
+        t.equal(main.rotationY, yaw, what);
+        mouse.postData(at(300, 180, {isDown: false}));
+    }
+    box.setDraggable(false);
+    call(vm, 'camera3d_setorbitcontrols', {ON: 'off'}, main);
+    mouse.postData(at(240, 180, {isDown: true}));
+    frame();
+    mouse.postData(at(300, 180));
+    frame();
+    t.equal(main.rotationY, yaw, 'controls off');
+    mouse.postData(at(300, 180, {isDown: false}));
+
+    // Orbiting a sprite: it follows it, but doesn't turn with it
+    call(vm, 'camera3d_setorbitcontrols', {ON: 'on'}, main);
+    call(vm, 'camera3d_setorbitpitchlimits', {MIN: -89, MAX: 89}, main);
+    call(vm, 'camera3d_setfollowangles', {YAW: 90, PITCH: 0}, main);
+    call(vm, 'camera3d_setfollowoffset', {X: 0, Y: 1, Z: 0}, main);
+    call(vm, 'camera3d_orbit', {TARGET: 'Box', DISTANCE: 4}, main);
+    box.setXYZ(5, 0, 0);
+    box.setRotation(0, 45, 0);
+    frame();
+    t.same(pose(), [9, 1, 0, 90, 0], 'to the side of the sprite, at the offset');
+    t.equal(call(vm, 'camera3d_following', {}, main), 'Box');
+
+    // Only the camera the stage shows gets the mouse
+    const top = vm.runtime.targets.find(target => target.getName() === 'Top');
+    call(vm, 'camera3d_orbitpoint', {X: 0, Y: 0, Z: 0, DISTANCE: 10}, top);
+    const topYaw = top.rotationY;
+    mouse.postData(at(240, 180, {isDown: true}));
+    frame();
+    mouse.postData(at(300, 180));
+    frame();
+    t.equal(top.rotationY, topYaw);
+    t.notEqual(round(main.rotationY), 90, 'the current camera turns');
+    mouse.postData(at(300, 180, {isDown: false}));
+
+    vm.stopAll();
+    t.equal(scene3D.follow.get(main), null, 'stops with the project');
+    t.end();
+});
+
+test('camera shake moves where the camera is drawn, not the camera', async t => {
+    const {vm, scene3D, main} = await makeVM();
+    main.setXYZ(0, 0, 5);
+    call(vm, 'camera3d_shake', {STRENGTH: 0.5, SECS: 1}, main);
+    scene3D._updateShake(0.1);
+    const drawn = scene3D.getGameCamera().position;
+    const moved = [drawn.x, drawn.y, drawn.z - 5];
+    t.ok(moved.some(n => n !== 0) && moved.every(n => Math.abs(n) <= (0.5 * 0.81) + 1e-9), 'moved a bit, fading');
+    t.same([main.x, main.y, main.z], [0, 0, 5], 'the camera sprite stays where it is');
+    t.equal(scene3D.getGameCamera().rotation.y, 0, 'doesn\'t turn');
+
+    call(vm, 'camera3d_shake', {STRENGTH: 0.1, SECS: 5}, main);
+    t.equal(scene3D._shake.strength, 0.5, 'a weaker shake doesn\'t replace a stronger one');
+    scene3D._updateShake(1);
+    t.equal(scene3D._shakeOffset, null, 'over after its time');
+    const still = scene3D.getGameCamera().position;
+    t.same([still.x, still.y, still.z], [0, 0, 5]);
+
+    call(vm, 'camera3d_shake', {STRENGTH: 1, SECS: 1}, main);
+    scene3D._updateShake(0.1);
+    vm.stopAll();
+    t.equal(scene3D._shakeOffset, null, 'stops with the project');
     t.end();
 });
 

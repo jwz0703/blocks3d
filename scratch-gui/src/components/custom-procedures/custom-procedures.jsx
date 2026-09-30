@@ -21,7 +21,7 @@ const messages = defineMessages({
 const CustomProcedures = props => (
     <Modal
         className={styles.modalContent}
-        contentLabel={props.intl.formatMessage(messages.myblockModalTitle)}
+        contentLabel={props.title || props.intl.formatMessage(messages.myblockModalTitle)}
         onRequestClose={props.onCancel}
         id="customProceduresModal"
     >
@@ -103,7 +103,27 @@ const CustomProcedures = props => (
                     </div>
                 </div>
             </div>
-            <div className={styles.checkboxRow}>
+            {props.purposes && props.purposes.length ? (
+                <div className={styles.checkboxRow}>
+                    <span>{'用途：'}</span>
+                    {props.purposes.map(item => (
+                        <label
+                            key={item.value}
+                            title={item.description}
+                        >
+                            <input
+                                checked={props.purpose === item.value}
+                                name="customProcedurePurpose"
+                                type="radio"
+                                value={item.value}
+                                onChange={props.onPurposeChange}
+                            />
+                            {item.label}
+                        </label>
+                    ))}
+                </div>
+            ) : null}
+            {props.hideWarp ? null : <div className={styles.checkboxRow}>
                 <label>
                     <input
                         checked={props.warp}
@@ -116,7 +136,7 @@ const CustomProcedures = props => (
                         id="gui.customProcedures.runWithoutScreenRefresh"
                     />
                 </label>
-            </div>
+            </div>}
             <Box className={styles.buttonRow}>
                 <button
                     className={styles.cancelButton}
@@ -145,13 +165,22 @@ const CustomProcedures = props => (
 
 CustomProcedures.propTypes = {
     componentRef: PropTypes.func.isRequired,
+    hideWarp: PropTypes.bool,
     intl: intlShape,
     onAddBoolean: PropTypes.func.isRequired,
     onAddLabel: PropTypes.func.isRequired,
     onAddTextNumber: PropTypes.func.isRequired,
     onCancel: PropTypes.func.isRequired,
     onOk: PropTypes.func.isRequired,
+    onPurposeChange: PropTypes.func,
     onToggleWarp: PropTypes.func.isRequired,
+    purpose: PropTypes.string,
+    title: PropTypes.string,
+    purposes: PropTypes.arrayOf(PropTypes.shape({
+        value: PropTypes.string,
+        label: PropTypes.string,
+        description: PropTypes.string
+    })),
     warp: PropTypes.bool.isRequired
 };
 

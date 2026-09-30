@@ -11,6 +11,7 @@ const MYSELF = '_myself_';
  * 分身: shown at the end of Control, after the clone blocks.
  * - 分身變數: variables of this sprite; every clone has its own copy. Their names are paths like the ones of 資料
  *   (e.g. `stats.hp`), and `x`, `position`, `costume`, `id`... are the sprite itself (see util/data-path.js).
+ * - 是分身？: whether the sprite running it is a clone (the sprite itself is `not` it).
  * - Clones by id: every clone has an id (`id`), given to "create clone of [sprite] with id ()" or else numbered 1, 2,
  *   3... Ids don't have to be unique.
  */
@@ -49,6 +50,8 @@ class CloneBlocks {
                 block('deleteVariable', BlockType.COMMAND, '刪除分身變數 [NAME]', {NAME: name}, true),
                 block('self', BlockType.REPORTER, '分身變數', {}, true),
                 '---',
+                // No "is original?": that is not (is clone?)
+                block('isClone', BlockType.BOOLEAN, '是分身？', {}, true),
                 block('deleteClones', BlockType.COMMAND, '刪除 [SPRITE] id 為 [ID] 的分身', {SPRITE: sprite, ID: id}),
                 block('cloneExists', BlockType.BOOLEAN, '[SPRITE] id 為 [ID] 的分身存在？', {SPRITE: sprite, ID: id}),
                 block('getOfClone', BlockType.REPORTER, '[SPRITE] id 為 [ID] 的分身的 [NAME]', {
@@ -101,6 +104,10 @@ class CloneBlocks {
             this.runtime.disposeTarget(clone);
             this.runtime.stopForTarget(clone);
         }
+    }
+
+    isClone (args, util) {
+        return !util.target.isOriginal;
     }
 
     cloneExists (args, util) {

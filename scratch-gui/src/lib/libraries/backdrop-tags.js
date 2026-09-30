@@ -1,5 +1,7 @@
 import messages from './tag-messages.js';
 export default [
+    // Backdrop packs: 3D skies that bring their own blocks
+    {tag: '3d', intlLabel: '3D 背景'},
     {tag: 'fantasy', intlLabel: messages.fantasy},
     {tag: 'music', intlLabel: messages.music},
     {tag: 'sports', intlLabel: messages.sports},

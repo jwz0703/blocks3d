@@ -5,8 +5,9 @@ const Color = require('../../util/color');
 const Environment = require('../../engine/scene-3d-environment');
 
 /**
- * Environment blocks: sky, sun, lighting, fog and exposure. They change the environment of the current backdrop
- * (see engine/scene-3d-environment.js); switching backdrops switches environments.
+ * Environment blocks: sun, lighting, fog and exposure, the same for every kind of sky. They change the environment
+ * of the current backdrop (see engine/scene-3d-environment.js); switching backdrops switches environments. Each kind
+ * of sky has its own blocks (sky-*.js). The sky blocks that were here still run, but aren't in the palette.
  */
 class Scratch3Environment3DBlocks {
     constructor (runtime) {
@@ -26,6 +27,7 @@ class Scratch3Environment3DBlocks {
                 {
                     opcode: 'setskytype',
                     blockType: BlockType.COMMAND,
+                    hideFromPalette: true,
                     text: '天空設為 [TYPE]',
                     arguments: {
                         TYPE: {type: ArgumentType.STRING, menu: 'skyType', defaultValue: 'procedural'}
@@ -34,6 +36,7 @@ class Scratch3Environment3DBlocks {
                 {
                     opcode: 'setskycolor',
                     blockType: BlockType.COMMAND,
+                    hideFromPalette: true,
                     text: '天空 [PART] 顏色設為 [COLOR]',
                     arguments: {
                         PART: {type: ArgumentType.STRING, menu: 'skyPart', defaultValue: 'color'},
@@ -43,10 +46,10 @@ class Scratch3Environment3DBlocks {
                 {
                     opcode: 'setclouds',
                     blockType: BlockType.COMMAND,
+                    hideFromPalette: true,
                     text: '雲量設為 [CLOUDS] %',
                     arguments: {CLOUDS: number(35)}
                 },
-                '---',
                 {
                     opcode: 'setsun',
                     blockType: BlockType.COMMAND,

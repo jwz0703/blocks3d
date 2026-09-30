@@ -121,3 +121,18 @@
 [dir="rtl"] .number {
     right: 0.15rem;
 }
+
+/* Instances of components (ROADMAP.md 階段 10): stacked like a pile, with the name of the component */
+.sprite-selector-item.is-instance {
+    box-shadow: 3px 3px 0 -1px $ui-white, 3px 3px 0 0 $ui-black-transparent;
+}
+
+.sprite-selector-item.is-instance.is-selected {
+    box-shadow: 0px 0px 0px 4px $looks-transparent, 3px 3px 0 -1px $ui-white, 3px 3px 0 1px $looks-secondary;
+}
+
+/* Shift-clicked, to make a component of several sprites */
+.sprite-selector-item.is-multi-selected {
+    border: 2px dashed #1f9e8f;
+    background: rgba(31, 158, 143, 0.12);
+}

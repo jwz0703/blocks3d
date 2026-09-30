@@ -90,7 +90,7 @@
     "redux-throttle": "0.1.1",
     "scratch-audio": "github:TurboWarp/scratch-audio#develop",
     "scratch-blocks": "github:TurboWarp/scratch-blocks#develop-builds",
-    "scratch-paint": "github:TurboWarp/scratch-paint#develop",
+    "scratch-paint": "file:../scratch-paint",
     "scratch-render": "file:../scratch-render",
     "scratch-vm": "file:../scratch-vm",
     "style-loader": "^0.23.0",

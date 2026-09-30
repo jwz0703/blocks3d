@@ -10,6 +10,8 @@ class Scratch3Events3DBlocks {
         this.runtime = runtime;
         /** @type {WeakMap<Target, {frame: number, over: boolean, before: boolean}>} */
         this._hover = new WeakMap();
+        /** @type {?{frame: number, x: number, y: number, target: ?Target3D}} see _pickedThisFrame */
+        this._pick = null;
     }
 
     getInfo () {
@@ -42,11 +44,24 @@ class Scratch3Events3DBlocks {
      */
     _isMouseOver (target) {
         if (target.isStage) return false;
-        const mouse = this.runtime.ioDevices.mouse;
-        if (target.is3D) {
-            return this.runtime.scene3D.pickTarget(mouse.getScratchX(), mouse.getScratchY()) === target;
-        }
+        if (target.is3D) return this._pickedThisFrame() === target;
         return target.isTouchingObject('_mouse_');
+    }
+
+    /**
+     * @returns {?Target3D} the 3D sprite under the mouse in this frame. Picked once per frame for every sprite with
+     * these hats: a pick casts a ray against every model, which costs milliseconds in a big scene, and a project
+     * with many clones would otherwise pick once per clone.
+     */
+    _pickedThisFrame () {
+        const mouse = this.runtime.ioDevices.mouse;
+        const x = mouse.getScratchX();
+        const y = mouse.getScratchY();
+        const cache = this._pick;
+        if (cache && cache.frame === this.runtime.frameCount && cache.x === x && cache.y === y) return cache.target;
+        const target = this.runtime.scene3D.pickTarget(x, y);
+        this._pick = {frame: this.runtime.frameCount, x, y, target};
+        return target;
     }
 
     /**

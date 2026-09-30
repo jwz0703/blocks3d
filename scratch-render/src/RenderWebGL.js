@@ -1813,6 +1813,15 @@ class RenderWebGL extends EventEmitter {
     }
 
     /**
+     * @param {int} drawableID The drawable's id.
+     * @returns {?int} the ID of the skin it shows, if any
+     */
+    getDrawableSkinId (drawableID) {
+        const drawable = this._allDrawables[drawableID];
+        return drawable && drawable.skin ? drawable.skin.id : null;
+    }
+
+    /**
      * Update a drawable's position.
      * @param {number} drawableID The drawable's id.
      * @param {Array.<number>} position The new position.

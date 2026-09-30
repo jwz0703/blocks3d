@@ -3,6 +3,7 @@ const log = require('../util/log');
 const AsyncLimiter = require('../util/async-limiter');
 const {loadSvgString, serializeSvgToString} = require('@turbowarp/scratch-svg-renderer');
 const {parseVectorMetadata} = require('../serialization/tw-costume-import-export');
+const {setCostumeSource, renderableSvg} = require('../engine/svg-bindings');
 
 const loadVector_ = function (costume, runtime, rotationCenter, optVersion) {
     return new Promise(resolve => {
@@ -34,9 +35,12 @@ const loadVector_ = function (costume, runtime, rotationCenter, optVersion) {
             }
         }
 
+        // SVG bindings read the SVG when drawing it (asset is gone in packaged projects)
+        setCostumeSource(costume, svgString);
+
         // createSVGSkin does the right thing if rotationCenter isn't provided, so it's okay if it's
         // undefined here
-        costume.skinId = runtime.renderer.createSVGSkin(svgString, rotationCenter);
+        costume.skinId = runtime.renderer.createSVGSkin(renderableSvg(svgString), rotationCenter);
         costume.size = runtime.renderer.getSkinSize(costume.skinId);
         // Now we should have a rotationCenter even if we didn't before
         if (!rotationCenter) {

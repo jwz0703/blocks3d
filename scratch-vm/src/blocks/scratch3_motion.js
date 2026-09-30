@@ -95,7 +95,8 @@ class Scratch3MotionBlocks {
             if (!goToTarget) return;
             ({x: targetX, y: targetY} = goToTarget.getStagePosition());
         }
-        return [targetX, targetY];
+        // Places are on the stage; a member of a component is placed in its component
+        return util.target.stageToLocal(targetX, targetY);
     }
 
     goTo (args, util) {
@@ -136,6 +137,7 @@ class Scratch3MotionBlocks {
             ({x: targetX, y: targetY} = pointTarget.getStagePosition());
         }
 
+        [targetX, targetY] = util.target.stageToLocal(targetX, targetY);
         const dx = targetX - util.target.x;
         const dy = targetY - util.target.y;
         const direction = 90 - MathUtil.radToDeg(Math.atan2(dy, dx));

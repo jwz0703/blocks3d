@@ -1,3 +1,5 @@
+const {SKY_PACKS} = require('./scene-3d-sky-packs');
+
 // The environment of the 3D scene: sky, lighting, sun, fog and tone mapping. Every backdrop of the stage has one
 // (costume.environment), so switching backdrops switches environments, and the backdrop blocks switch levels or
 // scenes like they did in 2D. A backdrop without one is a "2D backdrop": its picture shows behind the 3D scene.
@@ -6,6 +8,10 @@
 // and fbm clouds, made by a shader. hdri: an equirectangular image from the Files tab (.hdr, .exr, UltraHDR .jpg or
 // any image). 2d: the backdrop's own picture, drawn behind the scene like in Scratch.
 const SKY_TYPES = ['color', 'gradient', 'procedural', 'hdri', '2d'];
+
+// The block extension of each kind of sky (see scene-3d-sky-packs.js). The palette only shows one when a backdrop of
+// the project has that kind of sky. 2D backdrops are changed with the paint editor and the looks blocks.
+const SKY_EXTENSIONS = Object.fromEntries(SKY_PACKS.map(pack => [pack.id, pack.extension]));
 
 // Image-based lighting. sky: from the sky itself (procedural, gradient and hdri skies; the others fall back to room).
 // room: a neutral studio (three.js RoomEnvironment), needs no file. hdri: another image than the sky. none: only the
@@ -42,6 +48,16 @@ const defaultEnvironment = () => ({
 /**
  * @returns {object} the environment of a backdrop that has none: its 2D picture behind the scene
  */
+/**
+ * @param {string} type kind of sky, see scene-3d-sky-packs.js
+ * @returns {object} the environment of a new backdrop of that kind
+ */
+const defaultSkyEnvironment = type => {
+    const environment = defaultEnvironment();
+    if (SKY_TYPES.includes(type)) environment.sky.type = type;
+    return environment;
+};
+
 const default2DEnvironment = () => {
     const environment = defaultEnvironment();
     environment.sky.type = '2d';
@@ -171,9 +187,11 @@ const fromVersion1 = old => {
 
 module.exports = {
     SKY_TYPES,
+    SKY_EXTENSIONS,
     LIGHTING_TYPES,
     TONE_MAPPINGS,
     defaultEnvironment,
+    defaultSkyEnvironment,
     default2DEnvironment,
     mergeEnvironment,
     sunFromAngles,

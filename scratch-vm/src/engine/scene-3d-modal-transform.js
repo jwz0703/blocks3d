@@ -1,7 +1,10 @@
 // Blender-style modal transforms for the 3D editor: press G (move), R (rotate) or S (scale) with the pointer over
 // the stage and the selected sprite follows the mouse. X / Y / Z lock to an axis (again for the sprite's own axis,
 // again to unlock), Shift + X / Y / Z lock to the plane without that axis, typing a number sets the exact amount,
-// Ctrl snaps. Left click or Enter confirms; right click or Esc puts the sprite back.
+// Ctrl snaps. Left click or Enter confirms; right click or Esc puts the sprite back. Rotating shows the rotation
+// sphere (scene-3d-rotate-sphere.js).
+
+const {AXIS_COLORS, RotateSphere} = require('./scene-3d-rotate-sphere');
 
 const TYPES = {
     grab: {text: '移動', snap: 1},
@@ -9,7 +12,6 @@ const TYPES = {
     scale: {text: '縮放', snap: 0.1}
 };
 const AXES = ['x', 'y', 'z'];
-const AXIS_COLORS = {x: 0xff3352, y: 0x8bdc00, z: 0x2890ff};
 // Half the length of the constraint lines
 const LINE_LENGTH = 1000;
 // Pixels between the sprite's center and the pointer below which rotating and scaling aren't reliable
@@ -59,6 +61,8 @@ class ModalTransform {
 
         this._resetAngle();
         this._lines = null;
+        /** @type {?RotateSphere} */
+        this._sphere = null;
     }
 
     static get TYPES () {
@@ -178,6 +182,8 @@ class ModalTransform {
         const center = this._screenCenter();
         this._angle = 0;
         this._lastAngle = Math.atan2(this.pointer.y - center.y, this.pointer.x - center.x);
+        /** Direction of the pointer from the sprite on the screen when rotating started, where the sweep starts */
+        this._startAngle = this._lastAngle;
     }
 
     /**
@@ -199,6 +205,7 @@ class ModalTransform {
         if (this.type === 'grab') this._applyGrab();
         else if (this.type === 'rotate') this._applyRotate();
         else this._applyScale();
+        this._updateSphere();
         this.editor._modalChanged();
     }
 
@@ -272,6 +279,7 @@ class ModalTransform {
             angle = THREE.MathUtils.degToRad(numeric);
         }
         this.angle = THREE.MathUtils.radToDeg(angle);
+        this._rotation = {axis, angle};
         const quaternion = new THREE.Quaternion().setFromAxisAngle(axis, angle)
             .multiply(this.startQuaternion);
         const euler = new THREE.Euler().setFromQuaternion(quaternion, 'YXZ');
@@ -298,6 +306,43 @@ class ModalTransform {
             if (this.axis === null || locked !== this.plane) scale[axis] *= factor;
         }
         this.target.setScale(scale.x, scale.y, scale.z);
+    }
+
+    /**
+     * Show the rotation sphere while rotating.
+     */
+    _updateSphere () {
+        if (this.type !== 'rotate') {
+            this._removeSphere();
+            return;
+        }
+        const THREE = this.THREE;
+        if (!this._sphere) {
+            this._sphere = new RotateSphere(THREE);
+            const editorLayer = this.editor.scene3D.constructor.EDITOR_LAYER;
+            this._sphere.group.traverse(object => object.layers.set(editorLayer));
+            this.editor.scene3D.scene.add(this._sphere.group);
+        }
+        // Where the pointer was on the screen when rotating started, as a direction in the world
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+        const start = right.multiplyScalar(Math.cos(this._startAngle))
+            .addScaledVector(up, -Math.sin(this._startAngle));
+        this._sphere.update({
+            camera: this.camera,
+            center: this.startPosition,
+            orientation: this.local ? this.startQuaternion : new THREE.Quaternion(),
+            axis: this.axis,
+            rotationAxis: this._rotation.axis,
+            start,
+            angle: this._rotation.angle
+        });
+    }
+
+    _removeSphere () {
+        if (!this._sphere) return;
+        this._sphere.dispose();
+        this._sphere = null;
     }
 
     /**
@@ -346,6 +391,7 @@ class ModalTransform {
 
     dispose () {
         this._removeLines();
+        this._removeSphere();
     }
 
     /**

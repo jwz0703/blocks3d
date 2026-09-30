@@ -22,6 +22,8 @@ import StageSelectorComponent from '../components/stage-selector/stage-selector.
 import {getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
 import getEnvironmentPreview from '../lib/tw-environment-preview';
 import {handleFileUpload, costumeUpload} from '../lib/file-uploader.js';
+import {fileInputOf, uploadBackdropFiles} from '../lib/tw-sky-backdrop';
+import {askBackdropKind, renderBackdropKindModal} from '../components/tw-3d/backdrop-kind-modal.jsx';
 import {placeInViewport} from '../lib/backpack/code-payload.js';
 
 const dragTypes = [
@@ -54,6 +56,7 @@ class StageSelector extends React.Component {
             'setFileInput',
             'setRef'
         ]);
+        this.state = {backdropKindPrompt: null};
     }
     componentDidMount () {
         document.addEventListener('touchend', this.handleTouchEnd);
@@ -105,9 +108,23 @@ class StageSelector extends React.Component {
         this.handleNewBackdrop(emptyCostume(this.props.intl.formatMessage(sharedMessages.backdrop, {index: 1})));
     }
     handleBackdropUpload (e) {
+        // Images can be 2D backdrops or HDRI skies
+        const files = Array.from(e.target.files);
+        e.target.value = null;
+        uploadBackdropFiles(this.props.vm, files, images => askBackdropKind(this, images),
+            flats => this.uploadBackdrops(fileInputOf(flats))).then(added => {
+            if (!added) return;
+            this.props.vm.setEditingTarget(this.props.id);
+            this.props.onActivateTab(COSTUMES_TAB_INDEX);
+        });
+    }
+    /**
+     * @param {object} fileInput a file <input>, or something like one with its files
+     */
+    uploadBackdrops (fileInput) {
         const vm = this.props.vm;
         this.props.onShowImporting();
-        handleFileUpload(e.target, (buffer, fileType, fileName, fileIndex, fileCount) => {
+        handleFileUpload(fileInput, (buffer, fileType, fileName, fileIndex, fileCount) => {
             costumeUpload(buffer, fileType, vm, vmCostumes => {
                 this.props.vm.setEditingTarget(this.props.id);
                 vmCostumes.forEach((costume, i) => {
@@ -171,19 +188,22 @@ class StageSelector extends React.Component {
             'isRtl', 'workspaceMetrics'
         ]);
         return (
-            <DroppableThrottledStage
-                componentRef={this.setRef}
-                fileInputRef={this.setFileInput}
-                onBackdropFileUpload={this.handleBackdropUpload}
-                onBackdropFileUploadClick={this.handleFileUploadClick}
-                onClick={this.handleClick}
-                onDrop={this.handleDrop}
-                onEmptyBackdropClick={this.handleEmptyBackdrop}
-                onMouseEnter={this.handleMouseEnter}
-                onMouseLeave={this.handleMouseLeave}
-                onSurpriseBackdropClick={this.handleSurpriseBackdrop}
-                {...componentProps}
-            />
+            <React.Fragment>
+                <DroppableThrottledStage
+                    componentRef={this.setRef}
+                    fileInputRef={this.setFileInput}
+                    onBackdropFileUpload={this.handleBackdropUpload}
+                    onBackdropFileUploadClick={this.handleFileUploadClick}
+                    onClick={this.handleClick}
+                    onDrop={this.handleDrop}
+                    onEmptyBackdropClick={this.handleEmptyBackdrop}
+                    onMouseEnter={this.handleMouseEnter}
+                    onMouseLeave={this.handleMouseLeave}
+                    onSurpriseBackdropClick={this.handleSurpriseBackdrop}
+                    {...componentProps}
+                />
+                {renderBackdropKindModal(this)}
+            </React.Fragment>
         );
     }
 }

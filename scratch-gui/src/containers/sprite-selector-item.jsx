@@ -7,6 +7,9 @@ import {setHoveredSprite} from '../reducers/hovered-target';
 import {updateAssetDrag} from '../reducers/asset-drag';
 import VM from 'scratch-vm';
 import getCostumeUrl from '../lib/get-costume-url';
+import boundCostumeURL from '../lib/tw-bound-costume-url';
+import multiSelect from '../lib/tw-sprite-multiselect';
+import downloadBlob from '../lib/download-blob';
 import get3DThumbnail from '../lib/tw-3d-thumbnail';
 import DragRecognizer from '../lib/drag-recognizer';
 import {getEventXY} from '../lib/touch-utils';
@@ -29,7 +32,15 @@ class SpriteSelectorItem extends React.PureComponent {
             'handleMouseDown',
             'handleDragEnd',
             'handleDrag',
-            'handleTouchEnd'
+            'handleTouchEnd',
+            'handleMakeComponent',
+            'handleAddInstance',
+            'handleEditComponent',
+            'handleExportComponent',
+            'handleUnpackComponent',
+            'handleDeleteComponent',
+            'handleEnterComponent',
+            'handleMultiSelectChange'
         ]);
 
         this.dragRecognizer = new DragRecognizer({
@@ -37,12 +48,15 @@ class SpriteSelectorItem extends React.PureComponent {
             onDragEnd: this.handleDragEnd
         });
         this.state = {
-            thumbnail3D: null
+            thumbnail3D: null,
+            multiSelected: multiSelect.has(props.id),
+            multiSelectCount: multiSelect.ids().length
         };
     }
     componentDidMount () {
         document.addEventListener('touchend', this.handleTouchEnd);
         this.update3DThumbnail();
+        this.stopListening = multiSelect.listen(this.handleMultiSelectChange);
     }
     componentDidUpdate (prevProps) {
         if (prevProps.model3D !== this.props.model3D) {
@@ -51,8 +65,12 @@ class SpriteSelectorItem extends React.PureComponent {
     }
     componentWillUnmount () {
         document.removeEventListener('touchend', this.handleTouchEnd);
+        if (this.stopListening) this.stopListening();
         this.dragRecognizer.reset();
         this.unmounted = true;
+    }
+    handleMultiSelectChange () {
+        this.setState({multiSelected: multiSelect.has(this.props.id), multiSelectCount: multiSelect.ids().length});
     }
     update3DThumbnail () {
         const key = this.props.model3D;
@@ -67,6 +85,9 @@ class SpriteSelectorItem extends React.PureComponent {
     getCostumeData () {
         if (this.props.costumeURL) return this.props.costumeURL;
         if (this.props.model3D && this.state.thumbnail3D) return this.state.thumbnail3D;
+        // Costumes with SVG bindings show the values of this sprite or instance (ROADMAP.md 階段 10)
+        const bound = boundCostumeURL(this.props.vm, this.props.id);
+        if (bound) return bound;
         if (!this.props.asset) return null;
 
         return getCostumeUrl(this.props.asset);
@@ -108,6 +129,12 @@ class SpriteSelectorItem extends React.PureComponent {
     }
     handleClick (e) {
         e.preventDefault();
+        // Shift-click picks sprites to make one component of them
+        if (e.shiftKey && this.props.onDuplicateButtonClick) {
+            multiSelect.toggle(this.props.id);
+            return;
+        }
+        multiSelect.clear();
         if (!this.noClick) {
             this.props.onClick(this.props.id);
         }
@@ -127,6 +154,63 @@ class SpriteSelectorItem extends React.PureComponent {
     handleRename (e) {
         e.stopPropagation();
         this.props.onRenameButtonClick(this.props.id);
+    }
+    // Components (ROADMAP.md 階段 10)
+    target () {
+        return this.props.vm.runtime.getTargetById(this.props.id);
+    }
+    canMakeComponent () {
+        const target = this.target();
+        if (!target || target.isStage || target.componentOwner || target.is3D || target.isCamera || target.isCanvas) {
+            return false;
+        }
+        // Several sprites picked with shift-click (instances of components too) make one component together
+        if (this.state.multiSelectCount > 1 && this.state.multiSelected) return true;
+        return !target.sprite.component;
+    }
+    handleMakeComponent (e) {
+        e.stopPropagation();
+        const ids = this.state.multiSelected && this.state.multiSelectCount > 1 ? multiSelect.ids() : [this.props.id];
+        multiSelect.clear();
+        this.props.vm.makeComponentFrom(ids);
+    }
+    handleEnterComponent (e) {
+        e.stopPropagation();
+        this.props.vm.enterComponent(this.props.id);
+    }
+    handleAddInstance (e) {
+        e.stopPropagation();
+        this.props.vm.addComponentInstance(this.props.id);
+    }
+    handleEditComponent (e) {
+        e.stopPropagation();
+        const target = this.target();
+        if (!target) return;
+        // eslint-disable-next-line no-alert
+        const name = window.prompt('元件的新名稱：', target.sprite.name);
+        if (name) this.props.vm.renameComponent(this.props.id, name);
+    }
+    handleExportComponent (e) {
+        e.stopPropagation();
+        const target = this.target();
+        if (!target) return;
+        this.props.vm.exportComponent(this.props.id).then(content => {
+            downloadBlob(`${target.sprite.name}.3dsc`, content);
+        });
+    }
+    handleUnpackComponent (e) {
+        e.stopPropagation();
+        this.props.vm.unpackComponent(this.props.id);
+    }
+    handleDeleteComponent (e) {
+        e.stopPropagation();
+        const target = this.target();
+        if (!target) return;
+        const usage = this.props.vm.getComponentUsage(this.props.id);
+        // eslint-disable-next-line no-alert
+        const ok = window.confirm(`刪除元件「${target.sprite.name}」和它的 ${usage.instances} 個實體？\n` +
+            `其他角色裡有 ${usage.blocks} 個積木用到它，會留著但變成灰色、不會動作。`);
+        if (ok) this.props.vm.deleteComponent(this.props.id);
     }
     handleMouseLeave () {
         this.props.dispatchSetHoveredSprite(null);
@@ -157,6 +241,7 @@ class SpriteSelectorItem extends React.PureComponent {
             /* eslint-enable no-unused-vars */
             ...props
         } = this.props;
+        const componentName = this.props.componentName;
         return (
             <SpriteSelectorItemComponent
                 componentRef={this.setRef}
@@ -167,6 +252,16 @@ class SpriteSelectorItem extends React.PureComponent {
                 onDuplicateButtonClick={onDuplicateButtonClick ? this.handleDuplicate : null}
                 onExportButtonClick={onExportButtonClick ? this.handleExport : null}
                 onRenameButtonClick={onRenameButtonClick ? this.handleRename : null}
+                componentName={componentName}
+                onAddInstance={componentName ? this.handleAddInstance : null}
+                onDeleteComponent={componentName ? this.handleDeleteComponent : null}
+                onEditComponent={componentName ? this.handleEditComponent : null}
+                onMakeComponent={onDuplicateButtonClick && this.canMakeComponent() ? this.handleMakeComponent : null}
+                onExportComponent={componentName ? this.handleExportComponent : null}
+                onUnpackComponent={componentName ? this.handleUnpackComponent : null}
+                onEnterComponent={componentName && onDuplicateButtonClick ? this.handleEnterComponent : null}
+                multiSelected={this.state.multiSelected}
+                multiSelectCount={this.state.multiSelectCount}
                 onMouseDown={this.handleMouseDown}
                 onMouseEnter={this.handleMouseEnter}
                 onMouseLeave={this.handleMouseLeave}
@@ -179,6 +274,8 @@ class SpriteSelectorItem extends React.PureComponent {
 SpriteSelectorItem.propTypes = {
     // eslint-disable-next-line react/forbid-prop-types
     asset: PropTypes.any,
+    // Name of the component the sprite is an instance of
+    componentName: PropTypes.string,
     costumeURL: PropTypes.string,
     dispatchSetHoveredSprite: PropTypes.func.isRequired,
     // eslint-disable-next-line react/forbid-prop-types

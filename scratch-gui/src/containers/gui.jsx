@@ -17,6 +17,7 @@ import {
 import {
     activateTab,
     BLOCKS_TAB_INDEX,
+    COMPONENT_TAB_INDEX,
     COSTUMES_TAB_INDEX,
     FILES_TAB_INDEX
 } from '../reducers/editor-tab';
@@ -75,6 +76,10 @@ class GUI extends React.Component {
             // At this time the project view in www doesn't need to know when a project is unloaded
             this.props.onProjectLoaded();
         }
+        // The 元件 tab is for components: back to the code when the sprite isn't one (or the page is closed)
+        if (this.props.activeTabIndex === COMPONENT_TAB_INDEX && !this.props.componentTabAvailable) {
+            this.props.onActivateTab(BLOCKS_TAB_INDEX);
+        }
     }
     render () {
         if (this.props.isError) {
@@ -121,7 +126,10 @@ class GUI extends React.Component {
 }
 
 GUI.propTypes = {
+    activeTabIndex: PropTypes.number,
     assetHost: PropTypes.string,
+    componentTabAvailable: PropTypes.bool,
+    onActivateTab: PropTypes.func,
     children: PropTypes.node,
     cloudHost: PropTypes.string,
     error: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
@@ -162,6 +170,12 @@ const mapStateToProps = state => {
         alertsVisible: state.scratchGui.alerts.visible,
         backdropLibraryVisible: state.scratchGui.modals.backdropLibrary,
         blocksTabVisible: state.scratchGui.editorTab.activeTabIndex === BLOCKS_TAB_INDEX,
+        componentTabAvailable: !!(
+            state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget] &&
+            (state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget].componentId ||
+                state.scratchGui.targets.sprites[state.scratchGui.targets.editingTarget].componentOwnerId)
+        ),
+        componentTabVisible: state.scratchGui.editorTab.activeTabIndex === COMPONENT_TAB_INDEX,
         cardsVisible: state.scratchGui.cards.visible,
         connectionModalVisible: state.scratchGui.modals.connectionModal,
         costumeLibraryVisible: state.scratchGui.modals.costumeLibrary,
@@ -209,6 +223,7 @@ const mapDispatchToProps = dispatch => ({
     onActivateTab: tab => dispatch(activateTab(tab)),
     onActivateCostumesTab: () => dispatch(activateTab(COSTUMES_TAB_INDEX)),
     onActivateFilesTab: () => dispatch(activateTab(FILES_TAB_INDEX)),
+    onActivateComponentTab: () => dispatch(activateTab(COMPONENT_TAB_INDEX)),
     onRequestCloseBackdropLibrary: () => dispatch(closeBackdropLibrary()),
     onRequestCloseCostumeLibrary: () => dispatch(closeCostumeLibrary()),
     onRequestCloseTelemetryModal: () => dispatch(closeTelemetryModal())

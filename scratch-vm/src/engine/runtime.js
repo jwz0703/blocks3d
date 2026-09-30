@@ -22,6 +22,7 @@ const ScratchLinkWebSocket = require('../util/scratch-link-websocket');
 const FontManager = require('./tw-font-manager');
 const FileManager = require('./tw-file-manager');
 const Scene3D = require('./scene-3d');
+const StageUndo = require('./stage-undo');
 const CrossCall = require('./cross-call');
 const SpatialAudioEffect = require('./spatial-audio-effect');
 const CanvasSprites = require('./canvas-sprites');
@@ -55,6 +56,9 @@ const defaultBlockPackages = {
 };
 
 const interpolate = require('./tw-interpolate');
+const {SvgBindings} = require('./svg-bindings');
+const {SpriteInterfaces} = require('./sprite-interface');
+const {Components} = require('./components');
 const FrameLoop = require('./tw-frame-loop');
 const MonitorRecord = require('./monitor-record.js');
 const BlockSupport = require('./block-support');
@@ -296,7 +300,9 @@ class Runtime extends EventEmitter {
          * @private
          */
         this._parameterReporters = new Set([
-            'control_foreachframe_deltatime', 'control_for_range_index', 'control_start_as_clone_id'
+            'control_foreachframe_deltatime', 'control_for_range_index', 'control_start_as_clone_id',
+            // The arguments of an output in the hat that hears it (engine/components.js)
+            'twcomp_outputParam'
         ]);
 
         /**
@@ -304,6 +310,13 @@ class Runtime extends EventEmitter {
          * @type {number}
          */
         this.frameCount = 0;
+
+        /**
+         * The mouse cursor over the stage, a CSS cursor (twmouse "set cursor"). Back to 'default' when the project
+         * stops.
+         * @type {string}
+         */
+        this.cursor = 'default';
 
         /**
          * Map to look up hat blocks' metadata.
@@ -400,6 +413,15 @@ class Runtime extends EventEmitter {
          * tw: Responsible for managing the VM's many timers.
          */
         this.frameLoop = new FrameLoop(this);
+
+        /** Costumes whose SVG shows variables (ROADMAP.md 階段 10) */
+        this.svgBindings = new SvgBindings(this);
+
+        /** Public interfaces of sprites: events and public custom blocks (ROADMAP.md 階段 10) */
+        this.spriteInterfaces = new SpriteInterfaces(this);
+
+        /** Components: definitions and their instances (ROADMAP.md 階段 10) */
+        this.components = new Components(this);
 
         /**
          * Current length of a step.
@@ -603,6 +625,12 @@ class Runtime extends EventEmitter {
         this.fileManager = new FileManager(this);
 
         /**
+         * Undo for sprites changed on the stage and in the sprite info panel.
+         * @type {StageUndo}
+         */
+        this.stageUndo = new StageUndo(this);
+
+        /**
          * The 3D scene: 3D sprites, procedural objects, camera and environment.
          * @type {Scene3D}
          */
@@ -739,6 +767,14 @@ class Runtime extends EventEmitter {
      */
     static get INTERPOLATION_CHANGED () {
         return 'INTERPOLATION_CHANGED';
+    }
+
+    /**
+     * Event name for the mouse cursor over the stage changing (Runtime.setCursor).
+     * @const {string}
+     */
+    static get CURSOR_CHANGED () {
+        return 'CURSOR_CHANGED';
     }
 
     /**
@@ -1754,6 +1790,13 @@ class Runtime extends EventEmitter {
         // check if this is not one of those cases. E.g. an inline image on a block.
         if (argTypeInfo.fieldType === 'field_image') {
             argJSON = this._constructInlineImageJson(argInfo);
+        } else if (argInfo.label) {
+            // A text that is saved but can't be edited on the block, like the names in calls of custom blocks
+            argJSON = {
+                type: 'field_label_serializable',
+                name: placeholder,
+                text: typeof argInfo.defaultValue === 'undefined' ? '' : String(argInfo.defaultValue)
+            };
         } else {
             // Construct input value
 
@@ -2377,8 +2420,11 @@ class Runtime extends EventEmitter {
         if (optTarget) {
             targets = [optTarget];
         }
+        // On the page of a component only it runs, the project doesn't
+        const page = this.components.page;
         for (let t = targets.length - 1; t >= 0; t--) {
             const target = targets[t];
+            if (page && !this.components.inPage(target)) continue;
             const scripts = BlocksRuntimeCache.getScripts(target.blocks, opcode);
             for (let j = 0; j < scripts.length; j++) {
                 f(scripts[j], target);
@@ -2413,6 +2459,15 @@ class Runtime extends EventEmitter {
         // inside the allScriptsByOpcodeDo callback below.
         const startingThreadListLength = this.threads.length;
 
+        // Components (engine/components.js): a broadcast is only heard where it is sent (in the component, or outside
+        // all of them), and the green flag doesn't start anything inside a component
+        let hears = null;
+        const flag = requestedHatOpcode === 'event_whenflagclicked';
+        if (requestedHatOpcode === 'event_whenbroadcastreceived') {
+            const sender = this.sequencer.activeThread && this.sequencer.activeThread.target;
+            hears = this.components.broadcastScope(sender);
+        }
+
         // Consider all scripts, looking for hats with opcode `requestedHatOpcode`.
         this.allScriptsByOpcodeDo(requestedHatOpcode, (script, target) => {
             const {
@@ -2431,6 +2486,8 @@ class Runtime extends EventEmitter {
                     return;
                 }
             }
+            if (hears && !hears(target)) return;
+            if (flag && this.components.isInside(target)) return;
 
             if (hatMeta.restartExistingThreads) {
                 // If `restartExistingThreads` is true, we should stop
@@ -2487,6 +2544,8 @@ class Runtime extends EventEmitter {
             if (target.isOriginal) target.deleteMonitors();
         });
 
+        this.svgBindings.reset();
+        this.components.clear();
         this.targets.map(this.disposeTarget, this);
         this.extensionStorage = {};
         // tw: explicitly emit a MONITORS_UPDATE instead of relying on implicit behavior of _step()
@@ -2644,6 +2703,11 @@ class Runtime extends EventEmitter {
      * Start all threads that start with the green flag.
      */
     greenFlag () {
+        // On the page of a component the flag starts the component again
+        if (this.components.page) {
+            this.components.restartPage();
+            return;
+        }
         this.stopAll();
         // "when every frame" scripts run from now until the project stops, like a game's play mode
         this.frameHatsEnabled = true;
@@ -2656,6 +2720,8 @@ class Runtime extends EventEmitter {
             this.targets[i].onGreenFlag();
         }
         this.startHats('event_whenflagclicked');
+        // Components have no green flag: their instances start when the project does
+        this.components.fireCreated();
     }
 
     /**
@@ -2663,6 +2729,7 @@ class Runtime extends EventEmitter {
      */
     stopAll () {
         this.frameHatsEnabled = false;
+        this.setCursor('default');
         // Emit stop event to allow blocks to clean up any state.
         this.emit(Runtime.PROJECT_STOP_ALL);
 
@@ -2773,6 +2840,7 @@ class Runtime extends EventEmitter {
 
         // Key presses and releases since the last frame become this frame's "just pressed/released" keys.
         this.ioDevices.keyboard.stepFrame();
+        this.ioDevices.mouseWheel.stepFrame();
 
         // Find all edge-activated hats, and add them to threads to be evaluated.
         for (const hatType in this._hats) {
@@ -2782,6 +2850,8 @@ class Runtime extends EventEmitter {
                 this.startHats(hatType);
             }
         }
+        // "when property [ ] changes" of components, once per frame
+        this.components.flushChanges();
         this.redrawRequested = false;
         this._pushMonitors();
         if (this.profiler !== null) {
@@ -2821,6 +2891,8 @@ class Runtime extends EventEmitter {
         // internal purposes.
         this._lastStepDoneThreads = doneThreads;
         if (this.renderer) {
+            // Costumes that show variables, redrawn if their values changed
+            this.svgBindings.update();
             // @todo: Only render when this.redrawRequested or clones rendered.
             if (this.profiler !== null) {
                 if (rendererDrawProfilerId === -1) {
@@ -2966,6 +3038,15 @@ class Runtime extends EventEmitter {
         this.compilerOptions = Object.assign({}, this.compilerOptions, compilerOptions);
         this.resetAllCaches();
         this.emit(Runtime.COMPILER_OPTIONS_CHANGED, this.compilerOptions);
+    }
+
+    /**
+     * @param {string} cursor CSS cursor to show over the stage
+     */
+    setCursor (cursor) {
+        if (this.cursor === cursor) return;
+        this.cursor = cursor;
+        this.emit(Runtime.CURSOR_CHANGED, cursor);
     }
 
     /**
@@ -3517,12 +3598,22 @@ class Runtime extends EventEmitter {
      * @return {?Target} Target representing a sprite of the given name.
      */
     getSpriteTargetByName (spriteName) {
+        // Instances of components have their own names (engine/components.js); the name of the component isn't one
+        for (let i = 0; i < this.targets.length; i++) {
+            const target = this.targets[i];
+            // Members of components are only found from inside them (Components.resolveName)
+            if (!target.isStage && target.isOriginal && target.sprite && !target.componentOwner &&
+                target.getName() === spriteName) {
+                return target;
+            }
+        }
         for (let i = 0; i < this.targets.length; i++) {
             const target = this.targets[i];
             if (target.isStage) {
                 continue;
             }
-            if (target.sprite && target.sprite.name === spriteName) {
+            if (target.sprite && !target.sprite.component && !target.componentOwner &&
+                target.sprite.name === spriteName) {
                 return target;
             }
         }

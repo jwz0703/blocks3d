@@ -9,7 +9,7 @@ const NEXT = '_next_';
 const MYSELF = '_myself_';
 
 /**
- * Add a "green flag → mouse look → WASD/QE every frame" script to a camera or 3D sprite, unless it already uses the
+ * Add a "green flag → mouse look → WASD/QE (E up, Q down) every frame" script to a camera or 3D sprite, unless it already uses the
  * mouse look block. A camera flies around; a 3D sprite walks, with the current camera following it in first person.
  * @param {Runtime} runtime
  * @param {Target} target the sprite being edited
@@ -73,8 +73,8 @@ const addMouseLookExample = (runtime, target) => {
         ['s', 'back'],
         ['a', 'left'],
         ['d', 'right'],
-        ['q', 'up'],
-        ['e', 'down']
+        ['q', 'down'],
+        ['e', 'up']
     ].map(([key, direction]) => {
         const ifBlock = add('control_if');
         const pressed = add('sensing_keypressed');
@@ -229,6 +229,94 @@ class Scratch3Camera3DBlocks {
                     disableMonitor: true
                 },
                 '---',
+                // Orbiting (OrbitControls): the angles are the follow angles above, as world angles
+                {
+                    opcode: 'orbit',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞 [TARGET] 距離 [DISTANCE]',
+                    arguments: {
+                        TARGET: {type: ArgumentType.STRING, menu: 'followTarget', defaultValue: MYSELF},
+                        DISTANCE: {type: ArgumentType.NUMBER, defaultValue: 10}
+                    }
+                },
+                {
+                    opcode: 'orbitpoint',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞位置 x:[X] y:[Y] z:[Z] 距離 [DISTANCE]',
+                    arguments: {
+                        X: {type: ArgumentType.NUMBER, defaultValue: 0},
+                        Y: {type: ArgumentType.NUMBER, defaultValue: 0},
+                        Z: {type: ArgumentType.NUMBER, defaultValue: 0},
+                        DISTANCE: {type: ArgumentType.NUMBER, defaultValue: 10}
+                    }
+                },
+                {
+                    opcode: 'setorbitcontrols',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞的滑鼠控制 [ON]',
+                    arguments: {
+                        ON: {type: ArgumentType.STRING, menu: 'onOff', defaultValue: 'on'}
+                    }
+                },
+                {
+                    opcode: 'setorbitdistancelimits',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞距離限制在 [MIN] 到 [MAX]',
+                    arguments: {
+                        MIN: {type: ArgumentType.NUMBER, defaultValue: 2},
+                        MAX: {type: ArgumentType.NUMBER, defaultValue: 50}
+                    }
+                },
+                {
+                    opcode: 'setorbitpitchlimits',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞 pitch 限制在 [MIN] 到 [MAX] 度',
+                    arguments: {
+                        MIN: {type: ArgumentType.NUMBER, defaultValue: -89},
+                        MAX: {type: ArgumentType.NUMBER, defaultValue: 0}
+                    }
+                },
+                {
+                    opcode: 'setorbitdamping',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞阻尼設為 [DAMPING]',
+                    arguments: {
+                        DAMPING: {type: ArgumentType.NUMBER, defaultValue: 0.1}
+                    }
+                },
+                {
+                    opcode: 'setorbitautospeed',
+                    blockType: BlockType.COMMAND,
+                    text: '自動環繞速度設為 [SPEED] 度/秒',
+                    arguments: {
+                        SPEED: {type: ArgumentType.NUMBER, defaultValue: 10}
+                    }
+                },
+                {
+                    opcode: 'setorbitdistance',
+                    blockType: BlockType.COMMAND,
+                    text: '環繞距離設為 [DISTANCE]',
+                    arguments: {
+                        DISTANCE: {type: ArgumentType.NUMBER, defaultValue: 10}
+                    }
+                },
+                {
+                    opcode: 'orbitdistance',
+                    blockType: BlockType.REPORTER,
+                    text: '環繞距離',
+                    disableMonitor: true
+                },
+                '---',
+                {
+                    opcode: 'shake',
+                    blockType: BlockType.COMMAND,
+                    text: '相機震動 強度 [STRENGTH] 持續 [SECS] 秒',
+                    arguments: {
+                        STRENGTH: {type: ArgumentType.NUMBER, defaultValue: 0.3},
+                        SECS: {type: ArgumentType.NUMBER, defaultValue: 0.5}
+                    }
+                },
+                '---',
                 {
                     opcode: 'enablemouselook',
                     blockType: BlockType.COMMAND,
@@ -258,6 +346,13 @@ class Scratch3Camera3DBlocks {
                 followTarget: {
                     acceptReporters: true,
                     items: '_getFollowTargetMenu'
+                },
+                onOff: {
+                    acceptReporters: false,
+                    items: [
+                        {text: '開', value: 'on'},
+                        {text: '關', value: 'off'}
+                    ]
                 }
             }
         };
@@ -390,7 +485,63 @@ class Scratch3Camera3DBlocks {
 
     following (args, util) {
         const state = this.runtime.scene3D.follow.get(this._followCamera(util));
-        return state ? state.target.getName() : '';
+        return state && state.target ? state.target.getName() : '';
+    }
+
+    orbit (args, util) {
+        const target = this._resolveFollowTarget(args.TARGET, util);
+        if (!target) return;
+        const follow = this.runtime.scene3D.follow;
+        follow.orbit(this._followCamera(util), target, null, Cast.toNumber(args.DISTANCE));
+        follow.update(0);
+    }
+
+    orbitpoint (args, util) {
+        const follow = this.runtime.scene3D.follow;
+        follow.orbit(this._followCamera(util), null, {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z)
+        }, Cast.toNumber(args.DISTANCE));
+        follow.update(0);
+    }
+
+    setorbitcontrols (args, util) {
+        this.runtime.scene3D.follow.setOrbit(this._followCamera(util), {controls: args.ON !== 'off'});
+    }
+
+    setorbitdistancelimits (args, util) {
+        this.runtime.scene3D.follow.setOrbit(this._followCamera(util), {
+            minDistance: Cast.toNumber(args.MIN),
+            maxDistance: Cast.toNumber(args.MAX)
+        });
+    }
+
+    setorbitpitchlimits (args, util) {
+        this.runtime.scene3D.follow.setOrbit(this._followCamera(util), {
+            minPitch: Cast.toNumber(args.MIN),
+            maxPitch: Cast.toNumber(args.MAX)
+        });
+    }
+
+    setorbitdamping (args, util) {
+        this.runtime.scene3D.follow.setOrbit(this._followCamera(util), {damping: Cast.toNumber(args.DAMPING)});
+    }
+
+    setorbitautospeed (args, util) {
+        this.runtime.scene3D.follow.setOrbit(this._followCamera(util), {autoSpeed: Cast.toNumber(args.SPEED)});
+    }
+
+    setorbitdistance (args, util) {
+        this.runtime.scene3D.follow.setOrbit(this._followCamera(util), {distance: Cast.toNumber(args.DISTANCE)});
+    }
+
+    orbitdistance (args, util) {
+        return Math.round(this.runtime.scene3D.follow.getDistance(this._followCamera(util)) * 1e6) / 1e6;
+    }
+
+    shake (args) {
+        this.runtime.scene3D.shakeCamera(Cast.toNumber(args.STRENGTH), Cast.toNumber(args.SECS));
     }
 
     enablemouselook (args, util) {

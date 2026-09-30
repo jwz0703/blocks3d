@@ -6,6 +6,7 @@ import VM from 'scratch-vm';
 import SpriteLibrary from '../../containers/sprite-library.jsx';
 import SpriteSelectorComponent from '../sprite-selector/sprite-selector.jsx';
 import StageSelector from '../../containers/stage-selector.jsx';
+import {ComponentBackTile, ComponentRoot} from '../tw-component-mode/component-mode.jsx';
 import {STAGE_DISPLAY_SIZES} from '../../lib/layout-constants';
 
 import styles from './target-pane.css';
@@ -49,15 +50,22 @@ const TargetPane = ({
     sprites,
     vm,
     ...componentProps
-}) => (
-    <div
+}) => {
+    // The component mode (ROADMAP.md 階段 10): the sprite list shows the members of the component being edited, and
+    // its root takes the place of the stage. Outside it, members of components aren't listed.
+    const scope = vm && vm.runtime.components ? vm.runtime.components.editScope : null;
+    const scopeId = scope ? scope.id : null;
+    const listIds = Object.keys(sprites).filter(id => (sprites[id].componentOwnerId || null) === scopeId);
+    return (<div
         className={styles.targetPane}
         {...componentProps}
     >
 
         <SpriteSelectorComponent
             editingTarget={editingTarget}
+            leadingItem={scope ? <ComponentBackTile vm={vm} /> : null}
             hoveredTarget={hoveredTarget}
+            listIds={listIds}
             raised={raiseSprites}
             selectedId={editingTarget}
             spriteFileInput={fileInputRef}
@@ -85,7 +93,14 @@ const TargetPane = ({
             onSurpriseSpriteClick={onSurpriseSpriteClick}
         />
         <div className={styles.stageSelectorWrapper}>
-            {stage.id && <StageSelector
+            {scope ? (
+                <ComponentRoot
+                    selected={scope.id === editingTarget}
+                    vm={vm}
+                    onSelect={onSelectSprite}
+                />
+            ) : null}
+            {!scope && stage.id && <StageSelector
                 asset={
                     stage.costume &&
                     stage.costume.asset
@@ -106,8 +121,8 @@ const TargetPane = ({
                 ) : null}
             </div>
         </div>
-    </div>
-);
+    </div>);
+};
 
 const spriteShape = PropTypes.shape({
     costume: PropTypes.shape({
@@ -123,6 +138,8 @@ const spriteShape = PropTypes.shape({
         rotationCenterX: PropTypes.number,
         rotationCenterY: PropTypes.number
     }),
+    // The instance of a component this sprite is a member of
+    componentOwnerId: PropTypes.string,
     costumeCount: PropTypes.number,
     direction: PropTypes.number,
     id: PropTypes.string,

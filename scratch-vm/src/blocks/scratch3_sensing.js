@@ -219,6 +219,7 @@ class Scratch3SensingBlocks {
             ({x: targetX, y: targetY} = distTarget.getStagePosition());
         }
 
+        [targetX, targetY] = util.target.stageToLocal(targetX, targetY);
         const dx = util.target.x - targetX;
         const dy = util.target.y - targetY;
         return Math.sqrt((dx * dx) + (dy * dy));
@@ -236,12 +237,17 @@ class Scratch3SensingBlocks {
         util.ioQuery('clock', 'resetProjectTimer');
     }
 
+    // In a component the mouse is where it is in the component (twcomp 舞台滑鼠 x / y is the one on the stage)
     getMouseX (args, util) {
-        return util.ioQuery('mouse', 'getScratchX');
+        const x = util.ioQuery('mouse', 'getScratchX');
+        if (!util.target.componentOwner && !util.target.sprite.component) return x;
+        return util.target.stageToComponent(x, util.ioQuery('mouse', 'getScratchY'))[0];
     }
 
     getMouseY (args, util) {
-        return util.ioQuery('mouse', 'getScratchY');
+        const y = util.ioQuery('mouse', 'getScratchY');
+        if (!util.target.componentOwner && !util.target.sprite.component) return y;
+        return util.target.stageToComponent(util.ioQuery('mouse', 'getScratchX'), y)[1];
     }
 
     getMouseDown (args, util) {

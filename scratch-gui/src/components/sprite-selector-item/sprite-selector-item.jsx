@@ -15,9 +15,12 @@ const SpriteSelectorItem = props => (
     <ContextMenuTrigger
         attributes={{
             className: classNames(props.className, styles.spriteSelectorItem, {
-                [styles.isSelected]: props.selected
+                [styles.isSelected]: props.selected,
+                [styles.isInstance]: !!props.componentName,
+                [styles.isMultiSelected]: props.multiSelected
             }),
             onClick: props.onClick,
+            onDoubleClick: props.onEnterComponent,
             onMouseEnter: props.onMouseEnter,
             onMouseLeave: props.onMouseLeave,
             onMouseDown: props.onMouseDown,
@@ -44,8 +47,8 @@ const SpriteSelectorItem = props => (
         ) : null}
         <div className={styles.spriteInfo}>
             <div className={styles.spriteName}>{props.name}</div>
-            {props.details ? (
-                <div className={styles.spriteDetails}>{props.details}</div>
+            {props.details || props.componentName ? (
+                <div className={styles.spriteDetails}>{props.details || props.componentName}</div>
             ) : null}
         </div>
         {(props.selected && props.onDeleteButtonClick) ? (
@@ -83,6 +86,30 @@ const SpriteSelectorItem = props => (
                         />
                     </MenuItem>
                 ) : null}
+                {/* Components (ROADMAP.md 階段 10) */}
+                {props.componentName && props.onEnterComponent ? (
+                    <MenuItem onClick={props.onEnterComponent}>{'進入元件'}</MenuItem>
+                ) : null}
+                {props.onMakeComponent ? (
+                    <MenuItem onClick={props.onMakeComponent}>
+                        {props.multiSelectCount > 1 ? `把選取的 ${props.multiSelectCount} 個角色包成元件` : '包成元件'}
+                    </MenuItem>
+                ) : null}
+                {props.componentName && props.onAddInstance ? (
+                    <MenuItem onClick={props.onAddInstance}>{'再放一個'}</MenuItem>
+                ) : null}
+                {props.componentName && props.onEditComponent ? (
+                    <MenuItem onClick={props.onEditComponent}>{'重新命名元件'}</MenuItem>
+                ) : null}
+                {props.componentName && props.onExportComponent ? (
+                    <MenuItem onClick={props.onExportComponent}>{'匯出元件（.3dsc）'}</MenuItem>
+                ) : null}
+                {props.componentName && props.onUnpackComponent ? (
+                    <MenuItem onClick={props.onUnpackComponent}>{'解除元件'}</MenuItem>
+                ) : null}
+                {props.componentName && props.onDeleteComponent ? (
+                    <DangerousMenuItem onClick={props.onDeleteComponent}>{'刪除元件…'}</DangerousMenuItem>
+                ) : null}
                 {props.onDeleteButtonClick ? (
                     <DangerousMenuItem onClick={props.onDeleteButtonClick}>
                         <FormattedMessage
@@ -99,6 +126,7 @@ const SpriteSelectorItem = props => (
 
 SpriteSelectorItem.propTypes = {
     className: PropTypes.string,
+    componentName: PropTypes.string,
     componentRef: PropTypes.func,
     costumeURL: PropTypes.string,
     details: PropTypes.string,
@@ -106,10 +134,19 @@ SpriteSelectorItem.propTypes = {
     name: PropTypes.any,
     number: PropTypes.number,
     onClick: PropTypes.func,
+    onAddInstance: PropTypes.func,
     onDeleteButtonClick: PropTypes.func,
+    onDeleteComponent: PropTypes.func,
     onDuplicateButtonClick: PropTypes.func,
+    onEditComponent: PropTypes.func,
     onExportButtonClick: PropTypes.func,
+    onExportComponent: PropTypes.func,
+    onEnterComponent: PropTypes.func,
+    onMakeComponent: PropTypes.func,
+    multiSelectCount: PropTypes.number,
+    multiSelected: PropTypes.bool,
     onRenameButtonClick: PropTypes.func,
+    onUnpackComponent: PropTypes.func,
     onMouseDown: PropTypes.func,
     onMouseEnter: PropTypes.func,
     onMouseLeave: PropTypes.func,

@@ -48,6 +48,8 @@ const SpriteSelectorComponent = function (props) {
         editingTarget,
         hoveredTarget,
         intl,
+        leadingItem,
+        listIds,
         onChangeSprite3D,
         onChangeSpriteDirection,
         onChangeSpriteName,
@@ -93,6 +95,7 @@ const SpriteSelectorComponent = function (props) {
                     disabled={spriteInfoDisabled}
                     fov={selectedSprite.fov}
                     isCamera={selectedSprite.kind === 'camera'}
+                    mouseMode={selectedSprite.mouseMode}
                     name={selectedSprite.name}
                     rotationX={selectedSprite.rotationX}
                     rotationY={selectedSprite.rotationY}
@@ -131,7 +134,8 @@ const SpriteSelectorComponent = function (props) {
             <SpriteList
                 editingTarget={editingTarget}
                 hoveredTarget={hoveredTarget}
-                items={Object.keys(sprites).map(id => sprites[id])}
+                items={(listIds || Object.keys(sprites)).map(id => sprites[id])}
+                leadingItem={leadingItem}
                 raised={raised}
                 selectedId={selectedId}
                 onDeleteSprite={onDeleteSprite}
@@ -156,7 +160,7 @@ const SpriteSelectorComponent = function (props) {
                         title: intl.formatMessage(messages.addSpriteFromFile),
                         img: fileUploadIcon,
                         onClick: onFileUploadClick,
-                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .sprite2, .sprite3, .gif',
+                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .sprite2, .sprite3, .3dsc, .gif',
                         fileChange: onSpriteUpload,
                         fileInput: spriteFileInput,
                         fileMultiple: true
@@ -183,6 +187,10 @@ const SpriteSelectorComponent = function (props) {
 };
 
 SpriteSelectorComponent.propTypes = {
+    // The first tile of the list, before the sprites (返回 in the component mode)
+    leadingItem: PropTypes.node,
+    // The ids of the sprites that the list shows (all of them if not given)
+    listIds: PropTypes.arrayOf(PropTypes.string),
     editingTarget: PropTypes.string,
     hoveredTarget: PropTypes.shape({
         hoveredSprite: PropTypes.string,

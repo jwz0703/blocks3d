@@ -5,8 +5,13 @@ import {defineMessages, intlShape, injectIntl} from 'react-intl';
 import VM from 'scratch-vm';
 
 import AssetPanel from '../components/asset-panel/asset-panel.jsx';
-import EnvironmentPanel, {SKY_TYPES} from '../components/tw-3d/environment-panel.jsx';
+import EnvironmentPanel from '../components/tw-3d/environment-panel.jsx';
+import {askBackdropKind, renderBackdropKindModal} from '../components/tw-3d/backdrop-kind-modal.jsx';
+import {BACKDROP_UPLOAD_ACCEPT, fileInputOf, uploadBackdropFiles} from '../lib/tw-sky-backdrop';
+import {getSkyPack} from 'scratch-vm/src/engine/scene-3d-sky-packs';
 import PaintEditorWrapper from './paint-editor-wrapper.jsx';
+import SvgCodeEditor from '../components/tw-svg-code-editor/svg-code-editor.jsx';
+import codeStyles from '../components/tw-svg-code-editor/svg-code-editor.css';
 import getEnvironmentPreview from '../lib/tw-environment-preview';
 import getCostumeUrl from '../lib/get-costume-url';
 import log from '../lib/log';
@@ -37,7 +42,6 @@ import fileUploadIcon from '../components/action-menu/icon--file-upload.svg';
 import paintIcon from '../components/action-menu/icon--paint.svg';
 import surpriseIcon from '../components/action-menu/icon--surprise.svg';
 import searchIcon from '../components/action-menu/icon--search.svg';
-import skyIcon from '../components/action-menu/icon--sky.svg';
 
 import {getCostumeLibrary, getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
 
@@ -82,6 +86,8 @@ class CostumeTab extends React.Component {
     constructor (props) {
         super(props);
         bindAll(this, [
+            'handleShowPaint',
+            'handleShowCode',
             'handleSelectCostume',
             'handleDeleteCostume',
             'handleDuplicateCostume',
@@ -95,7 +101,6 @@ class CostumeTab extends React.Component {
             'handleDrop',
             'handleChangeEnvironment',
             'handleFilesChanged',
-            'handleNewEnvironment',
             'handleRenameBackdrop',
             'handleUploadSkyFile',
             'setFileInput'
@@ -162,17 +167,11 @@ class CostumeTab extends React.Component {
             const savedName = this.props.vm.runtime.fileManager.addFile(file.name, await file.arrayBuffer());
             this.handleChangeEnvironment(section === 'lighting' ?
                 {lighting: {type: 'hdri', file: savedName}} :
-                {sky: {type: 'hdri', file: savedName}});
+                {sky: {file: savedName}});
         } catch (err) {
             log.error(err);
             alert(`無法讀取檔案：${err}`); // eslint-disable-line no-alert
         }
-    }
-    handleNewEnvironment () {
-        // A backdrop whose picture is blank, since its sky covers it
-        const costume = emptyCostume('環境');
-        costume.environment = this.props.vm.getDefaultEnvironment3D();
-        this.handleNewCostume(costume);
     }
     handleSelectCostume (costumeIndex) {
         this.props.vm.editingTarget.setCostume(costumeIndex);
@@ -241,10 +240,24 @@ class CostumeTab extends React.Component {
         this.handleNewCostume(vmCostume);
     }
     handleCostumeUpload (e) {
+        if (this.props.vm.editingTarget.isStage) {
+            // Images can be 2D backdrops or HDRI skies
+            const files = Array.from(e.target.files);
+            e.target.value = null;
+            uploadBackdropFiles(this.props.vm, files, images => askBackdropKind(this, images),
+                flats => this.uploadCostumes(fileInputOf(flats)));
+            return;
+        }
+        this.uploadCostumes(e.target);
+    }
+    /**
+     * @param {object} fileInput a file <input>, or something like one with its files
+     */
+    uploadCostumes (fileInput) {
         const vm = this.props.vm;
         const targetId = this.props.vm.editingTarget.id;
         this.props.onShowImporting();
-        handleFileUpload(e.target, (buffer, fileType, fileName, fileIndex, fileCount) => {
+        handleFileUpload(fileInput, (buffer, fileType, fileName, fileIndex, fileCount) => {
             costumeUpload(buffer, fileType, vm, vmCostumes => {
                 vmCostumes.forEach((costume, i) => {
                     costume.name = `${fileName}${i ? i + 1 : ''}`;
@@ -290,6 +303,12 @@ class CostumeTab extends React.Component {
         // https://github.com/LLK/scratch-flash/blob/9fbac92ef3d09ceca0c0782f8a08deaa79e4df69/src/ui/media/MediaInfo.as#L224-L237
         return `${Math.ceil(size[0] / resolution)} x ${Math.ceil(size[1] / resolution)}`;
     }
+    handleShowPaint () {
+        this.setState({codeMode: false});
+    }
+    handleShowCode () {
+        this.setState({codeMode: true});
+    }
     render () {
         const {
             dispatchUpdateRestore, // eslint-disable-line no-unused-vars
@@ -323,9 +342,9 @@ class CostumeTab extends React.Component {
             // Backdrops are environments: the ones with a 3D sky show it instead of their (blank) picture. Stage items
             // always have a url, since the folders addon keeps the old one when an item has none.
             if (isStage && costume.environment && costume.environment.sky.type !== '2d') {
-                const skyType = SKY_TYPES.find(type => type.value === costume.environment.sky.type);
+                const pack = getSkyPack(costume.environment.sky.type);
                 item.url = getEnvironmentPreview(costume.environment, vm) || '';
-                item.details = skyType ? skyType.name : null;
+                item.details = pack ? pack.name : null;
             } else if (isStage && costume.asset) {
                 item.url = getCostumeUrl(costume.asset);
             }
@@ -335,19 +354,41 @@ class CostumeTab extends React.Component {
         const environment = isStage && target.costumes && target.costumes[selectedIndex] ?
             vm.getEnvironment3D(selectedIndex) :
             null;
+        // SVG costumes can be edited as code (bindings of any attribute), see ROADMAP.md 階段 10
+        const selectedCostume = target.costumes && target.costumes[selectedIndex];
+        const isSvg = !!selectedCostume && selectedCostume.dataFormat === 'svg';
+        const codeMode = isSvg && this.state.codeMode;
         const paintEditor = target.costumes ? (
-            <PaintEditorWrapper
-                selectedCostumeIndex={this.state.selectedCostumeIndex}
-            />
+            <div className={codeStyles.costumeEditor}>
+                {isSvg ? (
+                    <div className={codeStyles.modeSwitch}>
+                        <button
+                            className={codeMode ? null : codeStyles.modeOn}
+                            onClick={this.handleShowPaint}
+                        >{'繪圖'}</button>
+                        <button
+                            className={codeMode ? codeStyles.modeOn : null}
+                            onClick={this.handleShowCode}
+                        >{'SVG 程式碼'}</button>
+                    </div>
+                ) : null}
+                {codeMode ? (
+                    <SvgCodeEditor
+                        costumeIndex={selectedIndex}
+                        key={`${vm.editingTarget.id}:${selectedIndex}`}
+                        targetId={vm.editingTarget.id}
+                        vm={vm}
+                    />
+                ) : (
+                    <PaintEditorWrapper
+                        selectedCostumeIndex={this.state.selectedCostumeIndex}
+                    />
+                )}
+            </div>
         ) : null;
         return (
             <AssetPanel
                 buttons={[
-                    ...(isStage ? [{
-                        title: '新增環境',
-                        img: skyIcon,
-                        onClick: this.handleNewEnvironment
-                    }] : []),
                     {
                         title: intl.formatMessage(addLibraryMessage),
                         img: addLibraryIcon,
@@ -357,7 +398,9 @@ class CostumeTab extends React.Component {
                         title: intl.formatMessage(addFileMessage),
                         img: fileUploadIcon,
                         onClick: this.handleFileUploadClick,
-                        fileAccept: '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .gif',
+                        fileAccept: isStage ?
+                            BACKDROP_UPLOAD_ACCEPT :
+                            '.svg, .png, .bmp, .jpg, .jpeg, .jfif, .webp, .gif',
                         fileChange: this.handleCostumeUpload,
                         fileInput: this.setFileInput,
                         fileMultiple: true
@@ -402,6 +445,7 @@ class CostumeTab extends React.Component {
                         {environment.sky.type === '2d' ? paintEditor : null}
                     </div>
                 ) : paintEditor}
+                {renderBackdropKindModal(this)}
             </AssetPanel>
         );
     }

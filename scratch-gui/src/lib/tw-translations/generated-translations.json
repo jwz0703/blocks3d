@@ -4707,7 +4707,7 @@
     },
     "zh-cn": {
         "b3d.guiDefaultTitle": "用积木制作 3D 作品",
-        "b3d.home.description": "{APP_NAME} 是用积木制作 3D 游戏和作品的编辑器，也能打开 Scratch 项目：在上方输入项目 ID 或网址，或从下方挑选精选项目。",
+        "b3d.home.description": "{APP_NAME} 是用积木制作 3D 游戏和作品的编辑器。按上方的「切换到程序页面」开始制作，或从「文件」菜单打开 .3dsb 或 .sb3 文件。",
         "tw.accent.blue": "蓝色",
         "tw.accent.purple": "紫色",
         "tw.accent.rainbow": "彩虹色",
@@ -4973,7 +4973,7 @@
     },
     "zh-tw": {
         "b3d.guiDefaultTitle": "用積木製作 3D 作品",
-        "b3d.home.description": "{APP_NAME} 是用積木製作 3D 遊戲和作品的編輯器，也能開啟 Scratch 專案：在上方輸入專案 ID 或網址，或從下方挑選精選專案。",
+        "b3d.home.description": "{APP_NAME} 是用積木製作 3D 遊戲和作品的編輯器。按上方的「切換到程式頁面」開始製作，或從「檔案」選單開啟 .3dsb 或 .sb3 檔案。",
         "tw.alerts.lostPeripheralConnection": "與{extensionName}的連線中斷了。",
         "tw.backpack.rename": "新名稱:",
         "tw.blocks.addons": "擴充功能",

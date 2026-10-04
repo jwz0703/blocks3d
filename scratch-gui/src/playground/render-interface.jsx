@@ -23,7 +23,6 @@ import {FormattedMessage, defineMessages, injectIntl, intlShape} from 'react-int
 import {getIsLoading} from '../reducers/project-state.js';
 import AppStateHOC from '../lib/app-state-hoc.jsx';
 import ErrorBoundaryHOC from '../lib/error-boundary-hoc.jsx';
-import TWProjectMetaFetcherHOC from '../lib/tw-project-meta-fetcher-hoc.jsx';
 import TWStateManagerHOC from '../lib/tw-state-manager-hoc.jsx';
 import SBFileUploaderHOC from '../lib/sb-file-uploader-hoc.jsx';
 import TWPackagerIntegrationHOC from '../lib/tw-packager-integration-hoc.jsx';
@@ -31,18 +30,15 @@ import SettingsStore from '../addons/settings-store-singleton';
 import '../lib/tw-fix-history-api';
 import GUI from './render-gui.jsx';
 import MenuBar from '../components/menu-bar/menu-bar.jsx';
-import ProjectInput from '../components/tw-project-input/project-input.jsx';
-import FeaturedProjects from '../components/tw-featured-projects/featured-projects.jsx';
-import Description from '../components/tw-description/description.jsx';
 import BrowserModal from '../components/browser-modal/browser-modal.jsx';
-import CloudVariableBadge from '../containers/tw-cloud-variable-badge.jsx';
-import TWWindchimeSubmitter from '../containers/tw-windchime-submitter.jsx';
 import {isBrowserSupported} from '../lib/tw-environment-support-prober';
 import AddonChannels from '../addons/channels';
 import {loadServiceWorker} from './load-service-worker';
 import runAddons from '../addons/entry';
 import InvalidEmbed from '../components/tw-invalid-embed/invalid-embed.jsx';
 import {APP_NAME} from '../lib/brand.js';
+import {getStageBoxWidth} from '../lib/screen-utils';
+import {STAGE_SIZE_MODES} from '../lib/layout-constants';
 
 import styles from './interface.css';
 
@@ -157,13 +153,11 @@ class Interface extends React.Component {
         const {
             /* eslint-disable no-unused-vars */
             intl,
-            hasCloudVariables,
-            description,
             isFullScreen,
             isLoading,
             isPlayerOnly,
             isRtl,
-            projectId,
+            stageDisplayWidth,
             /* eslint-enable no-unused-vars */
             ...props
         } = this.props;
@@ -177,7 +171,6 @@ class Interface extends React.Component {
                 })}
                 dir={isRtl ? 'rtl' : 'ltr'}
             >
-                <TWWindchimeSubmitter />
                 {isHomepage ? (
                     <div className={styles.menu}>
                         <WrappedMenuBar
@@ -192,8 +185,9 @@ class Interface extends React.Component {
                 <div
                     className={styles.center}
                     style={isPlayerOnly ? ({
+                        // The stage fits in the same box as in the editor, whatever the project's resolution is.
                         // + 2 accounts for 1px border on each side of the stage
-                        width: `${Math.max(480, props.customStageSize.width) + 2}px`
+                        width: `${getStageBoxWidth(STAGE_SIZE_MODES.full, stageDisplayWidth) + 2}px`
                     }) : null}
                 >
                     <GUI
@@ -209,27 +203,10 @@ class Interface extends React.Component {
                                 <BrowserModal isRtl={isRtl} />
                             )}
                             <div className={styles.section}>
-                                <ProjectInput />
-                            </div>
-                            {hasCloudVariables && projectId !== '0' && (
-                                <div className={styles.section}>
-                                    <CloudVariableBadge />
-                                </div>
-                            )}
-                            {description.instructions || description.credits ? (
-                                <div className={styles.section}>
-                                    <Description
-                                        instructions={description.instructions}
-                                        credits={description.credits}
-                                        projectId={projectId}
-                                    />
-                                </div>
-                            ) : null}
-                            <div className={styles.section}>
-                                <p>
+                                <p className={styles.description}>
                                     <FormattedMessage
                                         // eslint-disable-next-line max-len
-                                        defaultMessage="{APP_NAME} is a block-based editor for making 3D games and projects. It can also open Scratch projects: input a project ID or URL above or choose a featured project below."
+                                        defaultMessage="{APP_NAME} is a block-based editor for making 3D games and projects. Click “See inside” above to start building, or open a .3dsb or .sb3 file from the File menu."
                                         description="Description of Blocks3D on the homepage"
                                         id="b3d.home.description"
                                         values={{
@@ -237,9 +214,6 @@ class Interface extends React.Component {
                                         }}
                                     />
                                 </p>
-                            </div>
-                            <div className={styles.section}>
-                                <FeaturedProjects studio="27205657" />
                             </div>
                         </React.Fragment>
                     ) : null}
@@ -252,31 +226,19 @@ class Interface extends React.Component {
 
 Interface.propTypes = {
     intl: intlShape,
-    hasCloudVariables: PropTypes.bool,
-    customStageSize: PropTypes.shape({
-        width: PropTypes.number,
-        height: PropTypes.number
-    }),
-    description: PropTypes.shape({
-        credits: PropTypes.string,
-        instructions: PropTypes.string
-    }),
     isFullScreen: PropTypes.bool,
     isLoading: PropTypes.bool,
     isPlayerOnly: PropTypes.bool,
     isRtl: PropTypes.bool,
-    projectId: PropTypes.string
+    stageDisplayWidth: PropTypes.number
 };
 
 const mapStateToProps = state => ({
-    hasCloudVariables: state.scratchGui.tw.hasCloudVariables,
-    customStageSize: state.scratchGui.customStageSize,
-    description: state.scratchGui.tw.description,
     isFullScreen: state.scratchGui.mode.isFullScreen,
     isLoading: getIsLoading(state.scratchGui.projectState.loadingState),
     isPlayerOnly: state.scratchGui.mode.isPlayerOnly,
     isRtl: state.locales.isRtl,
-    projectId: state.scratchGui.projectState.projectId
+    stageDisplayWidth: state.scratchGui.stageSize.stageDisplayWidth
 });
 
 const mapDispatchToProps = () => ({});
@@ -289,7 +251,6 @@ const ConnectedInterface = injectIntl(connect(
 const WrappedInterface = compose(
     AppStateHOC,
     ErrorBoundaryHOC('TW Interface'),
-    TWProjectMetaFetcherHOC,
     TWStateManagerHOC,
     TWPackagerIntegrationHOC
 )(ConnectedInterface);

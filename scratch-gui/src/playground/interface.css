@@ -61,6 +61,11 @@ a {
 .section {
     margin: 8px 0 8px 0;
 }
+.description {
+    margin-top: 16px;
+    line-height: 1.6;
+    color: $text-primary;
+}
 
 .footer {
     padding: 10px 0;
@@ -87,6 +92,7 @@ a {
 }
 .footer-section {
     display: flex;
+    align-items: center;
     flex-direction: column;
     width: 200px;
     margin-bottom: 10px;

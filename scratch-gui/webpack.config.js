@@ -249,8 +249,7 @@ module.exports = [
                 'process.env.DEBUG': Boolean(process.env.DEBUG),
                 'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER || ''),
                 'process.env.ROOT': JSON.stringify(root),
-                'process.env.ROUTING_STYLE': JSON.stringify(process.env.ROUTING_STYLE || 'filehash'),
-                'process.env.ENABLE_WINDCHIMES': JSON.stringify(process.env.ENABLE_WINDCHIMES || '')
+                'process.env.ROUTING_STYLE': JSON.stringify(process.env.ROUTING_STYLE || 'filehash')
             }),
             new HtmlWebpackPlugin({
                 chunks: ['editor'],
@@ -335,8 +334,7 @@ module.exports = [
             'process.env.DEBUG': Boolean(process.env.DEBUG),
             'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(''),
             'process.env.ROOT': JSON.stringify(''),
-            'process.env.ROUTING_STYLE': JSON.stringify('none'),
-            'process.env.ENABLE_WINDCHIMES': JSON.stringify('')
+            'process.env.ROUTING_STYLE': JSON.stringify('none')
         }),
         new webpack.NormalModuleReplacementPlugin(
             /scratch3_music[\\/]manifest\.js$/,
